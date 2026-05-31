@@ -29,6 +29,7 @@ use FireflyIII\Factory\AttachmentFactory;
 use FireflyIII\Models\Account;
 use FireflyIII\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Passport\Passport;
 use Override;
 use Tests\integration\TestCase;
 
@@ -46,7 +47,7 @@ final class ListControllerTest extends TestCase
 
     public function testIndex(): void
     {
-        $this->actingAs($this->user);
+        Passport::actingAs($this->user);
         $response = $this->getJson(route('api.v1.accounts.attachments', ['account' => $this->account->id]));
         $response->assertOk();
         $response->assertJson(['meta' => ['pagination' => ['total' => 2, 'total_pages' => 1]]]);
@@ -54,7 +55,7 @@ final class ListControllerTest extends TestCase
 
     public function testIndexCanChangePageSize(): void
     {
-        $this->actingAs($this->user);
+        Passport::actingAs($this->user);
         $response = $this->getJson(route('api.v1.accounts.attachments', ['account' => $this->account->id, 'limit' => 1]));
         $response->assertOk();
         $response->assertJson(['meta' => ['pagination' => ['total' => 2, 'total_pages' => 2]]]);
@@ -66,7 +67,6 @@ final class ListControllerTest extends TestCase
         parent::setUp();
 
         $this->user    = $this->createAuthenticatedUser();
-        $this->actingAs($this->user);
 
         $this->account = Account::factory()->for($this->user)->withType(AccountTypeEnum::ASSET)->create();
         app(AttachmentFactory::class)
