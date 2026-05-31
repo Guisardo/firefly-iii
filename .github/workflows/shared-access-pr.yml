@@ -1,0 +1,151 @@
+name: Shared access PR
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - feature/shared-administration-access
+      - feature/project-2-first-iteration
+  push:
+    branches:
+      - feature/shared-administration-access
+      - feature/project-2-first-iteration
+
+permissions:
+  contents: read
+
+jobs:
+  php-validation:
+    name: PHP validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: composer:v2
+          extensions: bcmath, curl, fileinfo, iconv, intl, json, mbstring, openssl, pdo, pdo_sqlite, session, simplexml, tokenizer, xml, xmlwriter
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist --no-scripts
+
+      - name: Prepare Laravel test environment
+        run: |
+          cp .env.testing .env
+          touch database/database.sqlite
+          php artisan key:generate --force --no-interaction
+
+      - name: PHP lint
+        run: find app tests routes database config -name '*.php' -print0 | xargs -0 -n 1 php -l
+
+      - name: Focused shared-access tests
+        run: |
+          php vendor/bin/phpunit -c phpunit.xml --no-coverage \
+            tests/integration/Api/Models/Account/ShowControllerTest.php \
+            tests/integration/Api/Models/Account/ListControllerTest.php
+
+      - name: Migration smoke
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
+        run: php artisan migrate --force --no-interaction
+
+      - name: Upload PHP validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-validation-logs
+          path: |
+            storage/logs
+            .phpunit.cache
+          if-no-files-found: ignore
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build v1 assets when script exists
+        working-directory: resources/assets/v1
+        run: npm run build --if-present
+
+      - name: Build v2 assets when script exists
+        working-directory: resources/assets/v2
+        run: npm run build --if-present
+
+  docker-smoke:
+    name: Docker smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build source image
+        run: docker build --pull -t firefly-iii-shared-access:${{ github.sha }} .
+
+      - name: Start source image with SQLite
+        run: |
+          docker run --detach --name firefly-smoke \
+            --publish 8080:8080 \
+            --env APP_ENV=testing \
+            --env APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+            --env DB_CONNECTION=sqlite \
+            --env DB_DATABASE=/tmp/firefly.sqlite \
+            firefly-iii-shared-access:${{ github.sha }} \
+            sh -c 'touch /tmp/firefly.sqlite && php artisan migrate --force --no-interaction && php artisan serve --host=0.0.0.0 --port=8080'
+
+      - name: Verify container responds
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 5 http://127.0.0.1:8080/ >/tmp/firefly-smoke-response.html; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs firefly-smoke
+          exit 1
+
+      - name: Collect Docker smoke logs
+        if: always()
+        run: |
+          mkdir -p storage/logs
+          docker logs firefly-smoke > storage/logs/docker-smoke.log 2>&1 || true
+
+      - name: Upload Docker smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-smoke
+          path: |
+            storage/logs/docker-smoke.log
+            /tmp/firefly-smoke-response.html
+          if-no-files-found: ignore
