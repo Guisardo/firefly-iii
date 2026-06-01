@@ -160,43 +160,61 @@ jobs:
           echo "$local_image_id" > build/release/local-image-id.txt
           echo "local_image_id=$local_image_id" >> "$GITHUB_OUTPUT"
 
-      # aquasecurity/trivy-action@v0.32.0
       - name: Vulnerability, secret, and config scan
         id: trivy-vulnerability
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4
         continue-on-error: true
-        with:
-          scan-type: image
-          image-ref: ${{ env.IMAGE_REPOSITORY }}:${{ env.IMMUTABLE_TAG }}
-          scanners: vuln,secret,misconfig
-          severity: ${{ inputs.vulnerability_gate == 'critical' && 'CRITICAL' || 'HIGH,CRITICAL' }}
-          ignore-unfixed: true
-          format: sarif
-          output: build/release/trivy-image.sarif
-          exit-code: ${{ inputs.vulnerability_gate == 'advisory' && '0' || '1' }}
+        run: |
+          set -euo pipefail
+          severity='HIGH,CRITICAL'
+          if [ '${{ inputs.vulnerability_gate }}' = 'critical' ]; then
+            severity='CRITICAL'
+          fi
+          exit_code='1'
+          if [ '${{ inputs.vulnerability_gate }}' = 'advisory' ]; then
+            exit_code='0'
+          fi
 
-      # aquasecurity/trivy-action@v0.32.0
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/build/release:/work" \
+            aquasec/trivy:0.64.1 \
+            image \
+            --scanners vuln,secret,misconfig \
+            --severity "$severity" \
+            --ignore-unfixed \
+            --format sarif \
+            --output /work/trivy-image.sarif \
+            --exit-code "$exit_code" \
+            "$IMAGE_REPOSITORY:$IMMUTABLE_TAG"
+
       - name: Generate CycloneDX SBOM
         id: trivy-sbom
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4
-        with:
-          scan-type: image
-          image-ref: ${{ env.IMAGE_REPOSITORY }}:${{ env.IMMUTABLE_TAG }}
-          format: cyclonedx
-          output: build/release/sbom.cdx.json
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/build/release:/work" \
+            aquasec/trivy:0.64.1 \
+            image \
+            --format cyclonedx \
+            --output /work/sbom.cdx.json \
+            "$IMAGE_REPOSITORY:$IMMUTABLE_TAG"
 
-      # aquasecurity/trivy-action@v0.32.0
       - name: Advisory license scan
         id: trivy-license
-        uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4
         continue-on-error: true
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: license
-          format: table
-          output: build/release/trivy-license.txt
-          exit-code: '0'
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/repo" \
+            -v "$PWD/build/release:/work" \
+            aquasec/trivy:0.64.1 \
+            fs \
+            --scanners license \
+            --format table \
+            --output /work/trivy-license.txt \
+            --exit-code 0 \
+            /repo
 
       - name: Build pre-publish provenance predicate
         run: |
