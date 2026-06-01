@@ -248,7 +248,7 @@
 {# Vue scripts and components. Only loaded when needed #}
 {% if VUE_SCRIPT_NAME %}
     <script src="v1/js/app_vue.js?v={{ FF_BUILD_TIME }}" type="text/javascript" nonce="{{ JS_NONCE }}"></script>
-    <script src="v1/js/{{ VUE_SCRIPT_NAME }}.js?v={{ FF_BUILD_TIME }}" type="text/javascript"
+    <script src="v1/js/{{ VUE_SCRIPT_NAME }}.js?v={{ FF_BUILD_TIME }}{% if userGroupId is defined and userGroupId %}&amp;user_group_id={{ userGroupId }}{% endif %}" type="text/javascript"
             nonce="{{ JS_NONCE }}"></script>
 {% endif %}
 

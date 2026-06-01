@@ -62,6 +62,7 @@ final class WebWriteControllerTest extends TestCase
         $response->assertOk();
         $response->assertSee(sprintf('window.userGroupId = %d;', $fixture['requested_group']->id), false);
         $response->assertSee(sprintf('/transactions/create/withdrawal?user_group_id=%d', $fixture['requested_group']->id), false);
+        $response->assertSee(sprintf('create_transaction.js?v=%d&amp;user_group_id=%d', config('firefly.build_time'), $fixture['requested_group']->id), false);
     }
 
     public function testTransactionCreateDeniesExplicitRequestedAdministrationForReadOnlyUser(): void
