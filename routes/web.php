@@ -102,6 +102,25 @@ Route::group(
     }
 );
 
+Route::get(
+    'v2/i18n/{language}.json',
+    static function (string $language) {
+        $translations = [];
+        $locale       = 'en_US';
+
+        foreach ((array) config('translations.json.v2', []) as $group => $keys) {
+            foreach ($keys as $key) {
+                $translations[$group][$key] = trans(sprintf('%s.%s', $group, $key), [], $locale);
+            }
+        }
+
+        return response()
+            ->json($translations)
+            ->header('Cache-Control', 'public, max-age=86400')
+        ;
+    }
+)->where('language', '[A-Za-z_-]+')->withoutMiddleware(['web']);
+
 // These routes only work when the user is NOT logged in.
 Route::group(
     ['middleware' => ['user-not-logged-in'], 'namespace' => 'FireflyIII\Http\Controllers'],
