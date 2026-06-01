@@ -29,7 +29,6 @@ use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
-use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -53,9 +52,7 @@ final class DestroyController extends Controller
             $userGroup        = $this->validateUserGroup($request);
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
-            if (ResolvesUserGroupParameter::hasExplicitUserGroup($request)) {
-                $this->repository->setUserGroup($userGroup);
-            }
+            $this->repository->setUserGroup($userGroup);
 
             return $next($request);
         });

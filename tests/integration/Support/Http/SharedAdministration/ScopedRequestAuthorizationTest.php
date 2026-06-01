@@ -208,6 +208,9 @@ final class ScopedRequestAuthorizationTest extends TestCase
     {
         return array_values(array_filter(Route::getRoutes()->getRoutes(), static function ($route): bool {
             $name = (string) $route->getName();
+            if (in_array($name, ['api.v1.user-groups.index', 'api.v1.user-groups.store'], true)) {
+                return false;
+            }
 
             return str_starts_with($name, 'api.v1.accounts.')
                 || str_starts_with($name, 'api.v1.transactions.')

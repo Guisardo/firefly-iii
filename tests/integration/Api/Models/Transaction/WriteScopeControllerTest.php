@@ -73,6 +73,30 @@ final class WriteScopeControllerTest extends TestCase
         $this->assertSame($this->fixture['active_group']->id, $this->user->refresh()->user_group_id);
     }
 
+    public function testStoreWithoutUserGroupIdUsesSelectedDefaultAccountsAcrossMembers(): void
+    {
+        $owner       = $this->createUserInGroup($this->fixture['active_group'], UserRoleEnum::OWNER);
+        $source      = $this->createAccountInGroup($owner, $this->fixture['active_group'], AccountTypeEnum::ASSET);
+        $destination = $this->createAccountInGroup($owner, $this->fixture['active_group'], AccountTypeEnum::EXPENSE);
+
+        Passport::actingAs($this->user);
+        $response = $this->postJson(route('api.v1.transactions.store'), $this->payload([
+            'source_id'     => $source->id,
+            'destination_id' => $destination->id,
+        ]));
+
+        $response->assertOk();
+        $transactionGroup = TransactionGroup::query()
+            ->where('user_id', $this->user->id)
+            ->where('user_group_id', $this->fixture['active_group']->id)
+            ->latest('id')
+            ->firstOrFail()
+        ;
+        $this->assertSame((string) $transactionGroup->id, $response->json('data.id'));
+        $this->assertSame($this->fixture['active_group']->id, $transactionGroup->transactionJournals()->firstOrFail()->user_group_id);
+        $this->assertSame($this->fixture['active_group']->id, $this->user->refresh()->user_group_id);
+    }
+
     public function testStoreRejectsCrossGroupAccountWhenExplicitGroupIsRequested(): void
     {
         $source      = $this->createAccountInGroup($this->user, $this->fixture['unrelated_group'], AccountTypeEnum::ASSET);
@@ -109,9 +133,10 @@ final class WriteScopeControllerTest extends TestCase
         $this->assertSame($this->fixture['active_group']->id, $this->user->refresh()->user_group_id);
     }
 
-    public function testUpdateWithoutUserGroupIdKeepsActiveGroupBehavior(): void
+    public function testUpdateWithoutUserGroupIdUsesSelectedDefaultAcrossMembers(): void
     {
-        $transactionGroup = $this->createWithdrawalInGroup($this->user, $this->fixture['active_group']);
+        $owner            = $this->createUserInGroup($this->fixture['active_group'], UserRoleEnum::OWNER);
+        $transactionGroup = $this->createWithdrawalInGroup($owner, $this->fixture['active_group']);
 
         Passport::actingAs($this->user);
         $response = $this->putJson(route('api.v1.transactions.update', ['transactionGroup' => $transactionGroup->id]), [
@@ -152,6 +177,23 @@ final class WriteScopeControllerTest extends TestCase
         $response = $this->deleteJson(route('api.v1.transactions.delete', [
             'transactionGroup' => $transactionGroup->id,
             'user_group_id'    => $this->fixture['requested_group']->id,
+        ]));
+
+        $response->assertNoContent();
+        $this->assertSoftDeleted('transaction_groups', ['id' => $transactionGroup->id]);
+        $this->assertSoftDeleted('transaction_journals', ['id' => $journalId]);
+        $this->assertSame($this->fixture['active_group']->id, $this->user->refresh()->user_group_id);
+    }
+
+    public function testDestroyWithoutUserGroupIdUsesSelectedDefaultAcrossMembers(): void
+    {
+        $owner            = $this->createUserInGroup($this->fixture['active_group'], UserRoleEnum::OWNER);
+        $transactionGroup = $this->createWithdrawalInGroup($owner, $this->fixture['active_group']);
+        $journalId        = $transactionGroup->transactionJournals()->firstOrFail()->id;
+
+        Passport::actingAs($this->user);
+        $response = $this->deleteJson(route('api.v1.transactions.delete', [
+            'transactionGroup' => $transactionGroup->id,
         ]));
 
         $response->assertNoContent();
@@ -207,6 +249,25 @@ final class WriteScopeControllerTest extends TestCase
             'id'    => $group->id,
             'title' => 'Read-only changed title',
         ]);
+    }
+
+    public function testReadOnlyUserCannotWriteSelectedDefaultTransactions(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $fixture['user']->groupMemberships()->where('user_group_id', $fixture['active_group']->id)->delete();
+        $this->createGroupMembership($fixture['user'], $fixture['active_group'], UserRoleEnum::READ_ONLY);
+        $source  = $this->createAccountInGroup($fixture['user'], $fixture['active_group'], AccountTypeEnum::ASSET);
+        $dest    = $this->createAccountInGroup($fixture['user'], $fixture['active_group'], AccountTypeEnum::EXPENSE);
+
+        Passport::actingAs($fixture['user']->refresh());
+        $response = $this->postJson(route('api.v1.transactions.store'), $this->payload([
+            'source_id'     => $source->id,
+            'destination_id' => $dest->id,
+        ]));
+
+        $response->assertUnauthorized();
+        $this->assertDatabaseMissing('transaction_groups', ['title' => 'Explicit requested-group transaction']);
+        $this->assertSame($fixture['active_group']->id, $fixture['user']->refresh()->user_group_id);
     }
 
     #[Override]

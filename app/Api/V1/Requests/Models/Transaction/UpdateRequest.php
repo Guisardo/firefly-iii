@@ -289,7 +289,7 @@ class UpdateRequest extends FormRequest
 
             // validate that the currency fits the source and/or destination account.
             // validate all account info
-            $this->validateAccountInformationUpdate($validator, $transactionGroup, $this->has('user_group_id') ? $this->getUserGroup() : null);
+            $this->validateAccountInformationUpdate($validator, $transactionGroup, $this->getUserGroup());
         });
         if ($validator->fails()) {
             Log::channel('audit')->error(sprintf('Validation errors in %s', self::class), $validator->errors()->toArray());
@@ -450,7 +450,7 @@ class UpdateRequest extends FormRequest
 
     private function ownershipRule(): BelongsUser|BelongsUserGroup
     {
-        if ($this->has('user_group_id') && null !== $this->getUserGroup()) {
+        if (null !== $this->getUserGroup()) {
             return new BelongsUserGroup($this->getUserGroup());
         }
 

@@ -31,7 +31,6 @@ use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
-use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use FireflyIII\Support\Http\Api\TransactionFilter;
 use FireflyIII\Support\JsonApi\Enrichments\PiggyBankEnrichment;
 use FireflyIII\Support\JsonApi\Enrichments\TransactionGroupEnrichment;
@@ -68,9 +67,7 @@ final class ListController extends Controller
             $userGroup        = $this->validateUserGroup($request);
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
-            if (ResolvesUserGroupParameter::hasExplicitUserGroup($request)) {
-                $this->repository->setUserGroup($userGroup);
-            }
+            $this->repository->setUserGroup($userGroup);
 
             return $next($request);
         });
@@ -115,9 +112,7 @@ final class ListController extends Controller
         $admin                                                    = auth()->user();
         $enrichment                                               = new PiggyBankEnrichment();
         $enrichment->setUser($admin);
-        if (ResolvesUserGroupParameter::hasExplicitUserGroup($request)) {
-            $enrichment->setUserGroup($this->userGroup);
-        }
+        $enrichment->setUserGroup($this->userGroup);
         $piggyBanks                                               = $enrichment->enrich($piggyBanks);
 
         // make paginator:
@@ -150,9 +145,7 @@ final class ListController extends Controller
         /** @var GroupCollectorInterface $collector */
         $collector                                                                              = app(GroupCollectorInterface::class);
         $collector->setUser($admin);
-        if (ResolvesUserGroupParameter::hasExplicitUserGroup($request)) {
-            $collector->setUserGroup($this->userGroup);
-        }
+        $collector->setUserGroup($this->userGroup);
         $collector->setAccounts(new Collection()->push($account))->withAPIInformation()->setLimit($limit)->setPage($page)->setTypes($types);
         if (null !== $start) {
             $collector->setStart($start);
@@ -167,9 +160,7 @@ final class ListController extends Controller
         // enrich
         $enrichment                                                                             = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
-        if (ResolvesUserGroupParameter::hasExplicitUserGroup($request)) {
-            $enrichment->setUserGroup($this->userGroup);
-        }
+        $enrichment->setUserGroup($this->userGroup);
         $transactions                                                                           = $enrichment->enrich($paginator->getCollection());
 
         /** @var TransactionGroupTransformer $transformer */

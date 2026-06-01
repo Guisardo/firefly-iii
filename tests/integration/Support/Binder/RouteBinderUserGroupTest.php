@@ -64,6 +64,21 @@ final class RouteBinderUserGroupTest extends TestCase
         $this->assertSame($fixture['requested_group']->id, $bound->user_group_id);
     }
 
+    public function testAccountBinderUsesResolvedSelectedDefaultContext(): void
+    {
+        $fixture   = $this->createMultiGroupUserFixture();
+        $groupUser = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
+        $account   = $this->createAccountInGroup($groupUser, $fixture['active_group'], AccountTypeEnum::ASSET);
+
+        $this->actingAs($fixture['user']);
+        $this->setSelectedDefaultRequest($fixture['user'], $fixture['active_group']);
+
+        $bound = Account::routeBinder((string) $account->id);
+
+        $this->assertSame($account->id, $bound->id);
+        $this->assertSame($fixture['active_group']->id, $bound->user_group_id);
+    }
+
     public function testAccountBinderPreservesLegacyUserBindingWithoutExplicitRequest(): void
     {
         $fixture = $this->createMultiGroupUserFixture();
@@ -104,6 +119,21 @@ final class RouteBinderUserGroupTest extends TestCase
 
         $this->assertSame($group->id, $bound->id);
         $this->assertSame($fixture['requested_group']->id, $bound->user_group_id);
+    }
+
+    public function testTransactionGroupBinderUsesResolvedSelectedDefaultContext(): void
+    {
+        $fixture   = $this->createMultiGroupUserFixture();
+        $groupUser = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
+        $group     = $this->createWithdrawalInGroup($groupUser, $fixture['active_group']);
+
+        $this->actingAs($fixture['user']);
+        $this->setSelectedDefaultRequest($fixture['user'], $fixture['active_group']);
+
+        $bound = TransactionGroup::routeBinder((string) $group->id);
+
+        $this->assertSame($group->id, $bound->id);
+        $this->assertSame($fixture['active_group']->id, $bound->user_group_id);
     }
 
     public function testTransactionGroupBinderDeniesObjectsOutsideResolvedUserGroup(): void
@@ -170,7 +200,17 @@ final class RouteBinderUserGroupTest extends TestCase
         $request = Request::create('/api/v1/shared', 'GET', ['user_group_id' => $userGroup->id]);
         /** @var AdministrationContext $context */
         $context = app(AdministrationContext::class);
-        $context->set($user, $userGroup, [UserRoleEnum::OWNER]);
+        $context->set($user, $userGroup, [UserRoleEnum::OWNER], AdministrationContext::SOURCE_EXPLICIT);
+        $request->attributes->set(AdministrationContext::REQUEST_ATTRIBUTE, $context);
+        app()->instance('request', $request);
+    }
+
+    private function setSelectedDefaultRequest(User $user, UserGroup $userGroup): void
+    {
+        $request = Request::create('/api/v1/shared', 'GET');
+        /** @var AdministrationContext $context */
+        $context = app(AdministrationContext::class);
+        $context->set($user, $userGroup, [UserRoleEnum::OWNER], AdministrationContext::SOURCE_SELECTED_DEFAULT);
         $request->attributes->set(AdministrationContext::REQUEST_ATTRIBUTE, $context);
         app()->instance('request', $request);
     }

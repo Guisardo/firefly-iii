@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII\Support\Binder;
 
 use FireflyIII\Models\UserGroup;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
 use FireflyIII\Support\Http\SharedAdministration\RouteRoleResolver;
@@ -40,25 +41,32 @@ class ResolvesUserGroupForRouteBinding
             return true;
         }
 
+        $context = self::administrationContext();
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return true;
+        }
+
         $request = self::request();
 
-        return $request instanceof Request && $request->has('user_group_id');
+        return $request instanceof Request && ResolvesUserGroupParameter::hasExplicitUserGroup($request);
     }
 
     public static function resolvedUserGroup(?Route $route = null): ?UserGroup
     {
         $routeGroup = self::routeParameter($route, 'userGroup');
         if ($routeGroup instanceof UserGroup) {
-            $requestedGroupId = self::requestedUserGroupId();
-            if (null !== $requestedGroupId && $routeGroup->id !== $requestedGroupId) {
+            if (self::requestHasExplicitUserGroup()) {
+                $requestedGroupId = self::requestedUserGroupId();
+                if (null === $requestedGroupId || $routeGroup->id !== $requestedGroupId) {
+                    return null;
+                }
+            }
+
+            if (!$routeGroup->exists) {
                 return null;
             }
 
             return $routeGroup;
-        }
-
-        if (!self::hasExplicitUserGroup($route)) {
-            return null;
         }
 
         $context = self::administrationContext();
@@ -77,13 +85,24 @@ class ResolvesUserGroupForRouteBinding
     private static function requestedUserGroupId(): ?int
     {
         $request = self::request();
-        if (!$request instanceof Request || !$request->has('user_group_id')) {
+        if (!$request instanceof Request || !self::requestHasExplicitUserGroup()) {
             return null;
         }
 
-        $userGroupId = (int) $request->get('user_group_id');
+        try {
+            $userGroupId = ResolvesUserGroupParameter::resolve($request);
+        } catch (Throwable) {
+            return null;
+        }
 
         return $userGroupId > 0 ? $userGroupId : null;
+    }
+
+    private static function requestHasExplicitUserGroup(): bool
+    {
+        $request = self::request();
+
+        return $request instanceof Request && ResolvesUserGroupParameter::hasExplicitUserGroup($request);
     }
 
     private static function request(): ?Request

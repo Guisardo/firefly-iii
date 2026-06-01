@@ -30,6 +30,7 @@ use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Tests\integration\TestCase;
 use Tests\integration\Traits\CreatesMultiGroupFixtures;
 
@@ -37,18 +38,32 @@ class AdministrationResolverTest extends TestCase
 {
     use CreatesMultiGroupFixtures;
 
-    public function testNoUserGroupIdLeavesContextUnresolved(): void
+    public function testSelectedDefaultResolvesWhenUserGroupIdIsOmitted(): void
     {
         $fixture = $this->createMultiGroupUserFixture();
         $request = $this->requestFor($fixture['user'], []);
 
-        $result  = $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+        $context = $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+
+        $this->assertInstanceOf(AdministrationContext::class, $context);
+        $this->assertSame($fixture['active_group']->id, $context->userGroup()->id);
+        $this->assertSame($context, $request->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE));
+        $this->assertFalse($context->hasExplicitUserGroupId());
+        $this->assertSame(AdministrationContext::SOURCE_SELECTED_DEFAULT, $context->source());
+    }
+
+    public function testNoUserGroupIdWithoutAcceptedRolesLeavesContextUnresolved(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $request = $this->requestFor($fixture['user'], []);
+
+        $result  = $this->resolver()->resolve($request, []);
 
         $this->assertNull($result);
         $this->assertFalse(app(AdministrationContext::class)->hasResolvedAdministration());
     }
 
-    public function testExplicitUserGroupIdResolvesRequestedGroupInsteadOfActiveDefault(): void
+    public function testExplicitUserGroupIdResolvesRequestedGroupInsteadOfSelectedDefault(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
         $request = $this->requestFor($fixture['user'], ['user_group_id' => $fixture['requested_group']->id]);
@@ -59,6 +74,54 @@ class AdministrationResolverTest extends TestCase
         $this->assertSame($fixture['requested_group']->id, $context->userGroup()->id);
         $this->assertNotSame($fixture['active_group']->id, $context->userGroup()->id);
         $this->assertSame($context, $request->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE));
+        $this->assertTrue($context->hasExplicitUserGroupId());
+        $this->assertSame(AdministrationContext::SOURCE_EXPLICIT, $context->source());
+    }
+
+    public function testStaleSelectedDefaultGroupIsDenied(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $fixture['active_group']->delete();
+        $request = $this->requestFor($fixture['user']->refresh(), []);
+
+        $this->expectException(AuthorizationException::class);
+
+        $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+    }
+
+    public function testSelectedDefaultWithoutMembershipIsDenied(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $fixture['user']->groupMemberships()->where('user_group_id', $fixture['active_group']->id)->delete();
+        $request = $this->requestFor($fixture['user']->refresh(), []);
+
+        $this->expectException(AuthorizationException::class);
+
+        $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+    }
+
+    public function testBlockedUserIsDeniedForSelectedDefault(): void
+    {
+        $fixture                  = $this->createMultiGroupUserFixture(UserRoleEnum::OWNER);
+        $fixture['user']->blocked = true;
+        $fixture['user']->save();
+        $request                  = $this->requestFor($fixture['user']->refresh(), []);
+
+        $this->expectException(AuthorizationException::class);
+
+        $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+    }
+
+    public function testSelectedDefaultRoleDenied(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $fixture['user']->groupMemberships()->where('user_group_id', $fixture['active_group']->id)->delete();
+        $this->createGroupMembership($fixture['user'], $fixture['active_group'], UserRoleEnum::READ_ONLY);
+        $request = $this->requestFor($fixture['user']->refresh(), []);
+
+        $this->expectException(AuthorizationException::class);
+
+        $this->resolver()->resolve($request, [UserRoleEnum::MANAGE_TRANSACTIONS]);
     }
 
     public function testCrossGroupRequestIsDenied(): void
@@ -112,6 +175,54 @@ class AdministrationResolverTest extends TestCase
         $this->resolver()->resolve($request, [UserRoleEnum::OWNER]);
     }
 
+    public function testJsonUserGroupIdResolvesRequestedGroup(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $request = $this->jsonRequestFor($fixture['user'], ['user_group_id' => $fixture['requested_group']->id]);
+
+        $context = $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+
+        $this->assertInstanceOf(AdministrationContext::class, $context);
+        $this->assertSame($fixture['requested_group']->id, $context->userGroup()->id);
+        $this->assertTrue($context->hasExplicitUserGroupId());
+        $this->assertSame(AdministrationContext::SOURCE_EXPLICIT, $context->source());
+    }
+
+    public function testConflictingQueryAndFormUserGroupIdsAreDenied(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $request = Request::create(
+            sprintf('/api/v1/accounts?user_group_id=%d', $fixture['active_group']->id),
+            'POST',
+            ['user_group_id' => $fixture['requested_group']->id]
+        );
+        $request->setUserResolver(static fn () => $fixture['user']);
+
+        try {
+            $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+            $this->fail('Conflicting query and form user_group_id values must fail closed.');
+        } catch (AuthorizationException|ConflictHttpException $exception) {
+            $this->assertNotSame('', $exception->getMessage());
+        }
+    }
+
+    public function testConflictingQueryAndJsonUserGroupIdsAreDenied(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $request = $this->jsonRequestFor(
+            $fixture['user'],
+            ['user_group_id' => $fixture['requested_group']->id],
+            sprintf('?user_group_id=%d', $fixture['active_group']->id)
+        );
+
+        try {
+            $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+            $this->fail('Conflicting query and JSON user_group_id values must fail closed.');
+        } catch (AuthorizationException|ConflictHttpException $exception) {
+            $this->assertNotSame('', $exception->getMessage());
+        }
+    }
+
     public function testBlockedUserIsDenied(): void
     {
         $fixture                  = $this->createMultiGroupUserFixture(UserRoleEnum::OWNER);
@@ -141,7 +252,7 @@ class AdministrationResolverTest extends TestCase
             'float string'   => ['1.5'],
             'mixed string'   => ['1abc'],
             'boolean'        => [true],
-            'array'          => [[1]],
+            'array'          => [[[1]]],
             'overflow'       => ['92233720368547758070'],
         ];
     }
@@ -149,5 +260,21 @@ class AdministrationResolverTest extends TestCase
     private function resolver(): AdministrationResolver
     {
         return app(AdministrationResolver::class);
+    }
+
+    private function jsonRequestFor($user, array $payload, string $query = ''): Request
+    {
+        $request = Request::create(
+            '/api/v1/accounts'.$query,
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'],
+            json_encode($payload)
+        );
+        $request->setUserResolver(static fn () => $user);
+
+        return $request;
     }
 }

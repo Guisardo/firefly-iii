@@ -11,32 +11,52 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 final class ResolvesUserGroupParameter
 {
+    private const string PARAMETER = 'user_group_id';
+
     public static function hasExplicitUserGroup(Request $request): bool
     {
-        return $request->query->has('user_group_id') || $request->request->has('user_group_id');
+        return [] !== self::explicitValues($request);
+    }
+
+    public static function resolveExplicit(Request $request): ?int
+    {
+        $values = self::explicitValues($request);
+        if ([] === $values) {
+            return null;
+        }
+
+        return self::normalizeUnique($values);
     }
 
     public static function resolve(Request $request, ?int $fallback = null): int
     {
+        return self::resolveExplicit($request) ?? (int) $fallback;
+    }
+
+    private static function explicitValues(Request $request): array
+    {
         $values = [];
 
-        if ($request->query->has('user_group_id')) {
-            $queryValue = $request->query->get('user_group_id');
+        if ($request->query->has(self::PARAMETER)) {
+            $queryValue = $request->query->all()[self::PARAMETER] ?? null;
             $values     = array_merge($values, is_array($queryValue) ? $queryValue : [$queryValue]);
         }
 
-        if ($request->request->has('user_group_id')) {
-            $bodyValue = $request->request->get('user_group_id');
-            if (is_array($bodyValue)) {
-                self::throwInvalid();
-            }
+        if ($request->request->has(self::PARAMETER)) {
+            $bodyValue = $request->request->all()[self::PARAMETER] ?? null;
             $values[]  = $bodyValue;
         }
 
-        if ([] === $values) {
-            return (int) $fallback;
+        if ($request->isJson() && $request->json()->has(self::PARAMETER)) {
+            $jsonValue = $request->json()->all()[self::PARAMETER] ?? null;
+            $values[]  = $jsonValue;
         }
 
+        return $values;
+    }
+
+    private static function normalizeUnique(array $values): int
+    {
         $normalized = [];
         foreach ($values as $value) {
             $normalized[] = self::normalize($value);
@@ -60,7 +80,7 @@ final class ResolvesUserGroupParameter
             self::throwInvalid();
         }
 
-        if (strlen($value) > strlen((string) PHP_INT_MAX) || strcmp($value, (string) PHP_INT_MAX) > 0) {
+        if (strlen($value) > strlen((string) PHP_INT_MAX) || (strlen($value) === strlen((string) PHP_INT_MAX) && strcmp($value, (string) PHP_INT_MAX) > 0)) {
             self::throwInvalid();
         }
 

@@ -26,6 +26,7 @@ namespace FireflyIII\Support\Request;
 
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\UserGroup;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\User;
 use Illuminate\Support\Facades\Log;
 
@@ -53,6 +54,10 @@ trait ChecksLogin
 
         /** @var User $user */
         $user      = auth()->user();
+        if (true === (bool) $user->blocked) {
+            return false;
+        }
+
         $userGroup = $this->getUserGroup();
         if (null === $userGroup) {
             Log::error('User has no valid user group submitted or otherwise.');
@@ -81,6 +86,11 @@ trait ChecksLogin
     {
         /** @var User $user */
         $user      = auth()->user();
+        $context   = $this->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE);
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return $context->userGroup();
+        }
+
         // Log::debug('Now in getUserGroup()');
 
         /** @var null|UserGroup $userGroup */

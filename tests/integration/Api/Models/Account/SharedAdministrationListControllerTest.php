@@ -61,6 +61,22 @@ final class SharedAdministrationListControllerTest extends TestCase
         $response->assertJsonPath('data.0.id', (string) $this->transactionGroup->id);
     }
 
+    public function testReadOnlyCanListTransactionsForSelectedDefaultGroupAccountOwnedByAnotherMember(): void
+    {
+        $owner            = $this->createUserInGroup($this->readOnlyUser->userGroup, UserRoleEnum::OWNER);
+        $transactionGroup = $this->createWithdrawalInGroup($owner, $this->readOnlyUser->userGroup);
+        $account          = $transactionGroup->transactionJournals->first()->transactions->first()->account;
+
+        Passport::actingAs($this->readOnlyUser);
+        $response = $this->getJson(route('api.v1.accounts.transactions', [
+            'account' => $account->id,
+        ]));
+
+        $response->assertOk();
+        $response->assertJson(['meta' => ['pagination' => ['total' => 1]]]);
+        $response->assertJsonPath('data.0.id', (string) $transactionGroup->id);
+    }
+
     public function testParentAccountMustMatchExplicitRequestedGroup(): void
     {
         $account = $this->transactionGroup->transactionJournals->first()->transactions->first()->account;

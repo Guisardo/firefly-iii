@@ -445,7 +445,10 @@ trait PeriodOverview
     private function transactionIndexRoute(string $type, Carbon $start, Carbon $end): string
     {
         $parameters = [$type, $start->format('Y-m-d'), $end->format('Y-m-d')];
-        if (request()->has('user_group_id')) {
+        if (method_exists($this, 'resolvedUserGroupQuery')) {
+            $parameters = array_merge($parameters, $this->resolvedUserGroupQuery());
+        }
+        if (!array_key_exists('user_group_id', $parameters) && request()->has('user_group_id')) {
             $parameters['user_group_id'] = request()->get('user_group_id');
         }
 

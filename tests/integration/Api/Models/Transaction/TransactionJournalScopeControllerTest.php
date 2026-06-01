@@ -127,15 +127,17 @@ final class TransactionJournalScopeControllerTest extends TestCase
         ]);
     }
 
-    public function testNoUserGroupIdPreservesLegacyCreatorOwnedBinding(): void
+    public function testNoUserGroupIdUsesSelectedDefaultBindingAcrossMembers(): void
     {
-        $owner   = $this->createUserInGroup($this->fixture['requested_group'], UserRoleEnum::OWNER);
-        $journal = $this->journal($this->createWithdrawalInGroup($owner, $this->fixture['requested_group']));
+        $owner   = $this->createUserInGroup($this->fixture['active_group'], UserRoleEnum::OWNER);
+        $group   = $this->createWithdrawalInGroup($owner, $this->fixture['active_group']);
+        $journal = $this->journal($group);
 
         Passport::actingAs($this->fixture['user']);
         $response = $this->getJson(route('api.v1.transaction-journals.show', ['tj' => $journal->id]));
 
-        $response->assertNotFound();
+        $response->assertOk();
+        self::assertSame((string) $group->id, $response->json('data.id'));
     }
 
     public function testNonMemberExplicitGroupIsDeniedBeforeJournalBinding(): void

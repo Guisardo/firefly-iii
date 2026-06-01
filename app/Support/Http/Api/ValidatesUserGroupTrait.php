@@ -28,7 +28,8 @@ use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Events\Model\UserGroup\SharedAdministrationAccessDenied;
 use FireflyIII\Events\Model\UserGroup\SharedAdministrationGroupSelected;
 use FireflyIII\Models\UserGroup;
-use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
 use FireflyIII\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -54,69 +55,23 @@ trait ValidatesUserGroupTrait
     protected function validateUserGroup(Request $request): UserGroup
     {
         Log::debug(sprintf('validateUserGroup: %s', static::class));
-        if (!auth()->check()) {
-            Log::debug('validateUserGroup: user is not logged in, return NULL.');
-
-            throw new AuthenticationException();
+        $context = $request->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE);
+        if (!$context instanceof AdministrationContext || !$context->hasResolvedAdministration()) {
+            /** @var AdministrationResolver $resolver */
+            $resolver = app(AdministrationResolver::class);
+            $context  = $resolver->resolve($request, $this->acceptedRoles);
         }
 
-        /** @var User $user */
-        $user        = auth()->user();
-        $groupId     = ResolvesUserGroupParameter::resolve($request, (int) $user->user_group_id);
-        $explicit    = ResolvesUserGroupParameter::hasExplicitUserGroup($request);
-        if (!$explicit) {
-            Log::debug(sprintf('validateUserGroup: no user group submitted, use default group #%d.', $groupId));
-        }
-        if ($explicit) {
-            Log::debug(sprintf('validateUserGroup: user group submitted, search for memberships in group #%d.', $groupId));
-        }
-
-        /** @var UserGroupRepositoryInterface $repository */
-        $repository  = app(UserGroupRepositoryInterface::class);
-        $repository->setUser($user);
-        $memberships = $repository->getMembershipsFromGroupId($groupId);
-
-        if (0 === $memberships->count()) {
-            Log::debug(sprintf('validateUserGroup: user has no access to group #%d.', $groupId));
-            $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'missing_membership');
-
-            throw new AuthorizationException((string) trans('validation.no_access_group'));
-        }
-
-        // need to get the group from the membership:
-        $group       = $repository->getById($groupId);
-        if (null === $group) {
-            Log::debug(sprintf('validateUserGroup: group #%d does not exist.', $groupId));
-            $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'missing_group');
-
+        if (!$context instanceof AdministrationContext || !$context->hasResolvedAdministration()) {
             throw new AuthorizationException((string) trans('validation.belongs_user_or_user_group'));
         }
-        Log::debug(sprintf('validateUserGroup: validate access of user to group #%d ("%s").', $groupId, $group->title));
-        if (0 === count($this->acceptedRoles)) {
-            Log::debug('validateUserGroup: no roles defined, so no access.');
-            $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'no_accepted_roles');
 
-            throw new AuthorizationException((string) trans('validation.no_accepted_roles_defined'));
-        }
-        Log::debug(sprintf('validateUserGroup: have %d roles to check.', count($this->acceptedRoles)), $this->acceptedRoles);
+        $this->user      = $context->user();
+        $this->userGroup = $context->userGroup();
 
-        /** @var UserRoleEnum $role */
-        foreach ($this->acceptedRoles as $role) {
-            if ($user->hasRoleInGroupOrOwner($group, $role)) {
-                Log::debug(sprintf('validateUserGroup: User has role "%s" in group #%d, return the group.', $role->value, $groupId));
-                $this->userGroup = $group;
-                $this->user      = $user;
-                $this->auditExplicitGroupSelection($explicit, $user, $group);
+        Log::debug(sprintf('validateUserGroup: resolved group #%d via %s.', $this->userGroup->id, $context->source() ?? 'unknown'));
 
-                return $group;
-            }
-            Log::debug(sprintf('validateUserGroup: User does NOT have role "%s" in group #%d, continue searching.', $role->value, $groupId));
-        }
-
-        Log::debug('validateUserGroup: User does NOT have enough rights to access endpoint.');
-        $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'insufficient_role');
-
-        throw new AuthorizationException((string) trans('validation.belongs_user_or_user_group'));
+        return $this->userGroup;
     }
 
     private function auditExplicitGroupDenial(bool $explicit, User $user, int $groupId, string $reason): void

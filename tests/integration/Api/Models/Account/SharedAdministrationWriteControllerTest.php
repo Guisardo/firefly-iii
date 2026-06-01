@@ -65,7 +65,7 @@ final class SharedAdministrationWriteControllerTest extends TestCase
         $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
     }
 
-    public function testStoreWithoutUserGroupIdUsesActiveGroupAndKeepsLegacyResponseShape(): void
+    public function testStoreWithoutUserGroupIdUsesSelectedDefaultAndKeepsV1ResponseShape(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
         $user    = $fixture['user'];
@@ -100,7 +100,7 @@ final class SharedAdministrationWriteControllerTest extends TestCase
         $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
     }
 
-    public function testStoreWithoutUserGroupIdKeepsLegacyValidationErrors(): void
+    public function testStoreWithoutUserGroupIdKeepsV1ValidationErrors(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
 
@@ -119,6 +119,26 @@ final class SharedAdministrationWriteControllerTest extends TestCase
         $this->assertSame($fixture['active_group']->id, $fixture['user']->refresh()->user_group_id);
     }
 
+    public function testReadOnlyCannotStoreInSelectedDefaultGroup(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $fixture['user']->groupMemberships()->where('user_group_id', $fixture['active_group']->id)->delete();
+        $this->createGroupMembership($fixture['user'], $fixture['active_group'], UserRoleEnum::READ_ONLY);
+
+        Passport::actingAs($fixture['user']->refresh());
+        $response = $this->postJson(route('api.v1.accounts.store'), [
+            'name'         => 'Denied selected checking',
+            'type'         => 'asset',
+            'account_role' => 'defaultAsset',
+        ]);
+
+        $response->assertUnauthorized();
+        $this->assertDatabaseMissing('accounts', [
+            'name'          => 'Denied selected checking',
+            'user_group_id' => $fixture['active_group']->id,
+        ]);
+    }
+
     public function testReadOnlyCannotStoreInExplicitRequestedGroup(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
@@ -135,6 +155,42 @@ final class SharedAdministrationWriteControllerTest extends TestCase
         $this->assertDatabaseMissing('accounts', [
             'name'          => 'Denied checking',
             'user_group_id' => $fixture['requested_group']->id,
+        ]);
+    }
+
+    public function testStoreDeniesConflictingQueryAndJsonUserGroupIds(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+
+        Passport::actingAs($fixture['user']);
+        $response = $this->postJson(route('api.v1.accounts.store', ['user_group_id' => $fixture['active_group']->id]), [
+            'user_group_id' => $fixture['requested_group']->id,
+            'name'          => 'Conflicting JSON checking',
+            'type'          => 'asset',
+            'account_role'  => 'defaultAsset',
+        ]);
+
+        $response->assertUnauthorized();
+        $this->assertDatabaseMissing('accounts', [
+            'name' => 'Conflicting JSON checking',
+        ]);
+    }
+
+    public function testStoreDeniesConflictingQueryAndFormUserGroupIds(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+
+        Passport::actingAs($fixture['user']);
+        $response = $this->post(route('api.v1.accounts.store', ['user_group_id' => $fixture['active_group']->id]), [
+            'user_group_id' => $fixture['requested_group']->id,
+            'name'          => 'Conflicting form checking',
+            'type'          => 'asset',
+            'account_role'  => 'defaultAsset',
+        ], ['Accept' => 'application/json']);
+
+        $response->assertUnauthorized();
+        $this->assertDatabaseMissing('accounts', [
+            'name' => 'Conflicting form checking',
         ]);
     }
 
@@ -159,15 +215,16 @@ final class SharedAdministrationWriteControllerTest extends TestCase
         ]);
     }
 
-    public function testUpdateWithoutUserGroupIdUsesActiveGroupAndKeepsLegacyResponseShape(): void
+    public function testUpdateWithoutUserGroupIdUsesSelectedDefaultAcrossMembersAndKeepsV1ResponseShape(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
         $user    = $fixture['user'];
-        $account = $this->createAccountInGroup($user, $fixture['active_group'], AccountTypeEnum::ASSET, 'Legacy update target');
+        $owner   = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
+        $account = $this->createAccountInGroup($owner, $fixture['active_group'], AccountTypeEnum::ASSET, 'Selected update target');
 
         Passport::actingAs($user);
         $response = $this->putJson(route('api.v1.accounts.update', ['account' => $account->id]), [
-            'name' => 'Legacy update renamed',
+            'name' => 'Selected update renamed',
         ]);
 
         $response->assertOk();
@@ -176,14 +233,14 @@ final class SharedAdministrationWriteControllerTest extends TestCase
                 'type'       => 'accounts',
                 'id'         => (string) $account->id,
                 'attributes' => [
-                    'name' => 'Legacy update renamed',
+                    'name' => 'Selected update renamed',
                     'type' => 'asset',
                 ],
             ],
         ]);
         $this->assertDatabaseHas('accounts', [
             'id'            => $account->id,
-            'name'          => 'Legacy update renamed',
+            'name'          => 'Selected update renamed',
             'user_group_id' => $fixture['active_group']->id,
         ]);
         $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
@@ -208,11 +265,12 @@ final class SharedAdministrationWriteControllerTest extends TestCase
         ]);
     }
 
-    public function testDestroyWithoutUserGroupIdUsesActiveGroupAndDoesNotSwitchDefault(): void
+    public function testDestroyWithoutUserGroupIdUsesSelectedDefaultAcrossMembersAndDoesNotSwitchDefault(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
         $user    = $fixture['user'];
-        $account = $this->createAccountInGroup($user, $fixture['active_group'], AccountTypeEnum::ASSET, 'Legacy delete target');
+        $owner   = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
+        $account = $this->createAccountInGroup($owner, $fixture['active_group'], AccountTypeEnum::ASSET, 'Selected delete target');
 
         Passport::actingAs($user);
         $response = $this->deleteJson(route('api.v1.accounts.delete', ['account' => $account->id]));

@@ -123,6 +123,8 @@
 
 {% endblock %}
 {% block scripts %}
+    {% set userGroupQuery = userGroupId is defined and userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
+
     {# required for groups.twig #}
     <script type="text/javascript" src="v1/js/ff/list/groups.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
     <script type="text/javascript" nonce="{{ JS_NONCE }}">

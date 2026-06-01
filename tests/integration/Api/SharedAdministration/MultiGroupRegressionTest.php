@@ -41,6 +41,27 @@ final class MultiGroupRegressionTest extends TestCase
     use CreatesMultiGroupFixtures;
     use RefreshDatabase;
 
+    public function testSelectedDefaultAutocompleteUsesSelectedAdministrationAcrossMembers(): void
+    {
+        $fixture       = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $user          = $fixture['user'];
+        $activeCreator = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
+
+        $this->createAccountInGroup($activeCreator, $fixture['active_group'], AccountTypeEnum::ASSET, 'Shared selected default');
+        $this->createAccountInGroup($user, $fixture['requested_group'], AccountTypeEnum::ASSET, 'Shared requested default');
+        $this->createAccountInGroup($user, $fixture['unrelated_group'], AccountTypeEnum::ASSET, 'Shared unrelated default');
+
+        Passport::actingAs($user);
+        $response = $this->getJson(route('api.v1.autocomplete.accounts', [
+            'query' => 'Shared',
+            'type'  => 'asset',
+        ]));
+
+        $response->assertOk();
+        $this->assertSame(['Shared selected default'], array_column($response->json(), 'name'));
+        $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
+    }
+
     public function testExplicitGroupReadUsesRequestedGroupInsteadOfActiveOrUnrelatedGroups(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);

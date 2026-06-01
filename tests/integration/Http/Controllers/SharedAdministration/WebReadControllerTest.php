@@ -44,6 +44,23 @@ final class WebReadControllerTest extends TestCase
 
     private array $fixture;
 
+    public function testAccountIndexUsesSelectedAdministrationWhenNoQueryParameterIsPresent(): void
+    {
+        $activeCreator    = $this->createUserInGroup($this->fixture['active_group'], UserRoleEnum::OWNER);
+        $activeAccount    = $this->createAccountInGroup($activeCreator, $this->fixture['active_group'], AccountTypeEnum::ASSET, 'Active scoped asset');
+        $requestedAccount = $this->createAccountInGroup($this->fixture['user'], $this->fixture['requested_group'], AccountTypeEnum::ASSET, 'Requested scoped asset');
+
+        $response         = $this->get(route('accounts.index', ['asset']));
+
+        $response->assertOk();
+        $response->assertViewHas('accounts', static function (LengthAwarePaginator $accounts) use ($activeAccount, $requestedAccount): bool {
+            $ids = $accounts->getCollection()->pluck('id')->all();
+
+            return in_array($activeAccount->id, $ids, true) && !in_array($requestedAccount->id, $ids, true);
+        });
+        $response->assertSee(sprintf('%s?user_group_id=%d', route('accounts.create', ['asset']), $this->fixture['active_group']->id), false);
+    }
+
     public function testAccountIndexHonorsExplicitRequestedAdministration(): void
     {
         $requestedAccount = $this->createAccountInGroup($this->fixture['user'], $this->fixture['requested_group'], AccountTypeEnum::ASSET, 'Requested scoped asset');
@@ -56,6 +73,40 @@ final class WebReadControllerTest extends TestCase
             $ids = $accounts->getCollection()->pluck('id')->all();
 
             return in_array($requestedAccount->id, $ids, true) && !in_array($activeAccount->id, $ids, true);
+        });
+    }
+
+    public function testTransactionIndexUsesSelectedAdministrationWhenNoQueryParameterIsPresent(): void
+    {
+        $activeCreator  = $this->createUserInGroup($this->fixture['active_group'], UserRoleEnum::OWNER);
+        $activeGroup    = $this->createWithdrawalInGroup($activeCreator, $this->fixture['active_group']);
+        $requestedGroup = $this->createWithdrawalInGroup($this->fixture['user'], $this->fixture['requested_group']);
+
+        $response       = $this->get(route('transactions.index', ['withdrawal', '2026-05-01', '2026-06-30']));
+
+        $response->assertOk();
+        $response->assertViewHas('groups', static function (LengthAwarePaginator $groups) use ($activeGroup, $requestedGroup): bool {
+            $ids = $groups->getCollection()->pluck('id')->all();
+
+            return in_array($activeGroup->id, $ids, true) && !in_array($requestedGroup->id, $ids, true);
+        });
+        $response->assertSee(sprintf('%s?user_group_id=%d', route('transactions.create', ['withdrawal']), $this->fixture['active_group']->id), false);
+        $response->assertSee(sprintf('%s?user_group_id=%d', route('chart.transactions.categories', ['withdrawal', '2026-05-01', '2026-06-30']), $this->fixture['active_group']->id), false);
+    }
+
+    public function testTransactionAllIndexUsesSelectedAdministrationWhenNoQueryParameterIsPresent(): void
+    {
+        $activeCreator  = $this->createUserInGroup($this->fixture['active_group'], UserRoleEnum::OWNER);
+        $activeGroup    = $this->createWithdrawalInGroup($activeCreator, $this->fixture['active_group']);
+        $requestedGroup = $this->createWithdrawalInGroup($this->fixture['user'], $this->fixture['requested_group']);
+
+        $response       = $this->get(route('transactions.index.all', ['all']));
+
+        $response->assertOk();
+        $response->assertViewHas('groups', static function (LengthAwarePaginator $groups) use ($activeGroup, $requestedGroup): bool {
+            $ids = $groups->getCollection()->pluck('id')->all();
+
+            return in_array($activeGroup->id, $ids, true) && !in_array($requestedGroup->id, $ids, true);
         });
     }
 
@@ -81,10 +132,22 @@ final class WebReadControllerTest extends TestCase
         $response->assertForbidden();
     }
 
+    public function testWebReadDeniesSelectedAdministrationWithoutMembership(): void
+    {
+        $this->fixture['user']->user_group_id = $this->fixture['unrelated_group']->id;
+        $this->fixture['user']->save();
+
+        $response = $this->get(route('accounts.index', ['asset']));
+
+        $response->assertForbidden();
+    }
+
     #[Override]
     protected function setUp(): void
     {
         parent::setUp();
+
+        config()->set('view.layout', 'v1');
 
         $this->fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
         $this->actingAs($this->fixture['user']);

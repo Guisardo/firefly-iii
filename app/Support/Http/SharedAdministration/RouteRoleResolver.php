@@ -123,6 +123,9 @@ class RouteRoleResolver
 
     private function userGroupRoles(Request $request, string $routeName): array
     {
+        if (str_ends_with($routeName, '.index') || str_ends_with($routeName, '.store')) {
+            return [];
+        }
         if (str_ends_with($routeName, '.use')) {
             return [UserRoleEnum::READ_ONLY, UserRoleEnum::MANAGE_TRANSACTIONS, UserRoleEnum::VIEW_MEMBERSHIPS];
         }

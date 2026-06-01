@@ -124,6 +124,7 @@ final class IndexController extends Controller
             'subTitle'     => $subTitle,
             'page'         => $page,
             'accounts'     => $accounts,
+            'userGroupId'  => $this->resolvedUserGroup()?->id,
         ]);
     }
 
@@ -208,6 +209,7 @@ final class IndexController extends Controller
             'subTitle'      => $subTitle,
             'page'          => $page,
             'accounts'      => $accounts,
+            'userGroupId'   => $this->resolvedUserGroup()?->id,
         ]);
     }
 

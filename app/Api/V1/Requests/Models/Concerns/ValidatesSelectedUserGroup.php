@@ -26,7 +26,6 @@ namespace FireflyIII\Api\V1\Requests\Models\Concerns;
 
 use Closure;
 use FireflyIII\Enums\AccountTypeEnum;
-use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\AccountMeta;
 use FireflyIII\Models\AccountType;
@@ -34,7 +33,8 @@ use FireflyIII\Models\UserGroup;
 use FireflyIII\Rules\BelongsUser;
 use FireflyIII\Rules\BelongsUserGroup;
 use FireflyIII\Support\Facades\Steam;
-use FireflyIII\User;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
 use Illuminate\Contracts\Validation\ValidationRule;
 
 use function Safe\json_encode;
@@ -45,45 +45,20 @@ trait ValidatesSelectedUserGroup
 
     protected function authorizeSelectedUserGroup(array $acceptedRoles): bool
     {
-        if (!$this->hasExplicitUserGroupId()) {
-            return true;
+        $context = $this->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE);
+        if (!$context instanceof AdministrationContext || !$context->hasResolvedAdministration()) {
+            /** @var AdministrationResolver $resolver */
+            $resolver = app(AdministrationResolver::class);
+            $context  = $resolver->resolve($this, $acceptedRoles);
         }
-        if (!auth()->check()) {
+
+        if (!$context instanceof AdministrationContext || !$context->hasResolvedAdministration()) {
             return false;
         }
 
-        /** @var User $user */
-        $user    = auth()->user();
-        if ($user->blocked) {
-            return false;
-        }
+        $this->selectedUserGroup = $context->userGroup();
 
-        $groupId = (int) $this->get('user_group_id');
-        if ($groupId < 1) {
-            return false;
-        }
-
-        /** @var null|UserGroup $userGroup */
-        $userGroup = UserGroup::find($groupId);
-        if (null === $userGroup) {
-            return false;
-        }
-
-        $membershipCount = $user->groupMemberships()->where('user_group_id', $userGroup->id)->count();
-        if (0 === $membershipCount) {
-            return false;
-        }
-
-        /** @var UserRoleEnum $role */
-        foreach ($acceptedRoles as $role) {
-            if ($user->hasRoleInGroupOrOwner($userGroup, $role)) {
-                $this->selectedUserGroup = $userGroup;
-
-                return true;
-            }
-        }
-
-        return false;
+        return true;
     }
 
     protected function selectedUserGroupId(): ?int
@@ -220,7 +195,11 @@ trait ValidatesSelectedUserGroup
 
     protected function hasExplicitUserGroupId(): bool
     {
-        return $this->has('user_group_id');
+        if ($this->query->has('user_group_id') || $this->request->has('user_group_id')) {
+            return true;
+        }
+
+        return $this->isJson() && $this->json()->has('user_group_id');
     }
 
     private function accountTypeIdsForValidation(?string $type, ?Account $account): array

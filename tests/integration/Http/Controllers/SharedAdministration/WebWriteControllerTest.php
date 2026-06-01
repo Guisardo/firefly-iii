@@ -39,6 +39,21 @@ final class WebWriteControllerTest extends TestCase
 {
     use CreatesMultiGroupFixtures;
 
+    public function testTransactionCreateUsesSelectedAdministrationWhenNoQueryParameterIsPresent(): void
+    {
+        config()->set('view.layout', 'v1');
+
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        $this->actingAs($fixture['user']);
+
+        $response = $this->get(route('transactions.create', ['withdrawal']));
+
+        $response->assertOk();
+        $response->assertSee(sprintf('window.userGroupId = %d;', $fixture['active_group']->id), false);
+        $response->assertSee(sprintf('/transactions/create/withdrawal?user_group_id=%d', $fixture['active_group']->id), false);
+        $response->assertSee(sprintf('create_transaction.js?v=%d&amp;user_group_id=%d', config('firefly.build_time'), $fixture['active_group']->id), false);
+    }
+
     public function testTransactionCreateHonorsExplicitRequestedAdministrationForManager(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
@@ -65,12 +80,36 @@ final class WebWriteControllerTest extends TestCase
         $response->assertSee(sprintf('create_transaction.js?v=%d&amp;user_group_id=%d', config('firefly.build_time'), $fixture['requested_group']->id), false);
     }
 
+    public function testV2TransactionCreateExposesSelectedAdministrationForClientRequests(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        $this->actingAs($fixture['user']);
+
+        $response = $this->get(route('transactions.create', ['withdrawal']));
+
+        $response->assertOk();
+        $response->assertSee(sprintf('userGroupId: %d', $fixture['active_group']->id), false);
+        $response->assertSee(sprintf('window.userGroupId = %d;', $fixture['active_group']->id), false);
+    }
+
     public function testTransactionCreateDeniesExplicitRequestedAdministrationForReadOnlyUser(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
         $this->actingAs($fixture['user']);
 
         $response = $this->get(route('transactions.create', ['withdrawal', 'user_group_id' => $fixture['requested_group']->id]));
+
+        $response->assertForbidden();
+    }
+
+    public function testTransactionCreateDeniesSelectedAdministrationForReadOnlyUser(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $fixture['user']->groupMemberships()->where('user_group_id', $fixture['active_group']->id)->delete();
+        $this->createGroupMembership($fixture['user'], $fixture['active_group'], UserRoleEnum::READ_ONLY);
+        $this->actingAs($fixture['user']->refresh());
+
+        $response = $this->get(route('transactions.create', ['withdrawal']));
 
         $response->assertForbidden();
     }

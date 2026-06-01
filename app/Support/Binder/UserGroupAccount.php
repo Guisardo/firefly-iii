@@ -24,11 +24,6 @@ declare(strict_types=1);
 namespace FireflyIII\Support\Binder;
 
 use FireflyIII\Models\Account;
-use FireflyIII\Models\GroupMembership;
-use FireflyIII\Models\UserGroup;
-use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
-use FireflyIII\User;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Routing\Route;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -43,33 +38,19 @@ class UserGroupAccount implements BinderInterface
     public static function routeBinder(string $value, Route $route): Account
     {
         if (auth()->check()) {
-            /** @var User $user */
-            $user = auth()->user();
-            if (!ResolvesUserGroupParameter::hasExplicitUserGroup(request())) {
-                return Account::routeBinder($value);
+            $userGroup = ResolvesUserGroupForRouteBinding::resolvedUserGroup($route);
+            if (null !== $userGroup) {
+                $account = Account::query()
+                    ->where('id', (int) $value)
+                    ->where('user_group_id', $userGroup->id)
+                    ->first()
+                ;
+                if (null !== $account) {
+                    return $account;
+                }
             }
-
-            $userGroupId = ResolvesUserGroupParameter::resolve(request());
-            $userGroup   = UserGroup::find($userGroupId);
-            if (!$userGroup instanceof UserGroup) {
-                throw new AuthorizationException((string) trans('validation.no_access_group'));
-            }
-            $memberships = GroupMembership::query()
-                ->where('user_id', $user->id)
-                ->where('user_group_id', $userGroup->id)
-                ->count()
-            ;
-            if (0 === $memberships) {
-                throw new AuthorizationException((string) trans('validation.no_access_group'));
-            }
-
-            $account = Account::query()
-                ->where('id', (int) $value)
-                ->where('user_group_id', $userGroup->id)
-                ->first()
-            ;
-            if (null !== $account) {
-                return $account;
+            if (!ResolvesUserGroupForRouteBinding::hasExplicitUserGroup($route)) {
+                return Account::routeBinder($value, $route);
             }
         }
 

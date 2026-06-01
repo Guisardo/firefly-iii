@@ -25,11 +25,11 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
 use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Support\Http\Api\TransactionFilter;
-use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\JsonApi\Enrichments\TransactionGroupEnrichment;
 use FireflyIII\Transformers\TransactionGroupTransformer;
 use FireflyIII\User;
@@ -46,6 +46,18 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 final class ShowController extends Controller
 {
     use TransactionFilter;
+
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+
+            return $next($request);
+        });
+    }
 
     /**
      * This endpoint is documented at:
@@ -68,13 +80,10 @@ final class ShowController extends Controller
         // use new group collector:
         /** @var GroupCollectorInterface $collector */
         $collector    = app(GroupCollectorInterface::class);
-        $context      = app(AdministrationContext::class);
         $collector
             ->setUser($admin)
+            ->setUserGroup($this->userGroup)
         ;
-        if ($context->hasResolvedAdministration()) {
-            $collector->setUserGroup($context->userGroup());
-        }
         $collector
             // all info needed for the API:
             ->withAPIInformation()
@@ -94,6 +103,7 @@ final class ShowController extends Controller
         // enrich
         $enrichment   = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $transactions = $enrichment->enrich($paginator->getCollection());
 
         /** @var TransactionGroupTransformer $transformer */
@@ -122,13 +132,10 @@ final class ShowController extends Controller
         // use new group collector:
         /** @var GroupCollectorInterface $collector */
         $collector     = app(GroupCollectorInterface::class);
-        $context       = app(AdministrationContext::class);
         $collector
             ->setUser($admin)
+            ->setUserGroup($this->userGroup)
         ;
-        if ($context->hasResolvedAdministration()) {
-            $collector->setUserGroup($context->userGroup());
-        }
         $collector
             // filter on transaction group.
             ->setTransactionGroup($transactionGroup)
@@ -144,6 +151,7 @@ final class ShowController extends Controller
         // enrich
         $enrichment    = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $selectedGroup = $enrichment->enrichSingle($selectedGroup);
 
         /** @var TransactionGroupTransformer $transformer */

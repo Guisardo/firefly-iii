@@ -21,6 +21,11 @@
 import Autocomplete from "bootstrap5-autocomplete";
 
 export function selectedUserGroupId() {
+    const pageUserGroupId = parseInt(window.fireflyPageState?.userGroupId ?? window.userGroupId ?? 0);
+    if (pageUserGroupId > 0) {
+        return pageUserGroupId;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const userGroupId = parseInt(params.get('user_group_id') ?? 0);
 

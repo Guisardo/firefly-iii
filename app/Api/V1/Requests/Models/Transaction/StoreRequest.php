@@ -200,12 +200,7 @@ class StoreRequest extends FormRequest
             $this->validateForeignCurrencyInformation($validator);
 
             // validate all account info
-            if ($this->has('user_group_id')) {
-                $this->validateAccountInformation($validator, auth()->user(), $this->getUserGroup());
-            }
-            if (!$this->has('user_group_id')) {
-                $this->validateAccountInformation($validator);
-            }
+            $this->validateAccountInformation($validator, auth()->user(), $this->getUserGroup());
 
             // validate source/destination is equal, depending on the transaction journal type.
             $this->validateEqualAccounts($validator);
@@ -320,7 +315,7 @@ class StoreRequest extends FormRequest
 
     private function ownershipRule(): BelongsUser|BelongsUserGroup
     {
-        if ($this->has('user_group_id') && null !== $this->getUserGroup()) {
+        if (null !== $this->getUserGroup()) {
             return new BelongsUserGroup($this->getUserGroup());
         }
 

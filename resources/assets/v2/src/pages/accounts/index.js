@@ -56,7 +56,7 @@ if(sortingColumn[0] === '-') {
 }
 
 page = parseInt(params.page ?? 1);
-const userGroupId = parseInt(params.user_group_id ?? 0);
+const userGroupId = parseInt(window.fireflyPageState?.userGroupId ?? window.userGroupId ?? params.user_group_id ?? 0);
 
 showInternalsButton();
 showWizardButton();

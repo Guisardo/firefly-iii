@@ -101,11 +101,12 @@ final class ShowControllerTest extends TestCase
         $response->assertUnauthorized();
     }
 
-    public function testIndexWithoutExplicitGroupUsesActiveDefault(): void
+    public function testIndexWithoutExplicitGroupUsesSelectedDefaultAcrossMembers(): void
     {
         $fixture          = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $activeCreator    = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
         $requestedCreator = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
-        $activeGroup      = $this->createWithdrawalInGroup($fixture['user'], $fixture['active_group']);
+        $activeGroup      = $this->createWithdrawalInGroup($activeCreator, $fixture['active_group']);
         $this->createWithdrawalInGroup($requestedCreator, $fixture['requested_group']);
 
         Passport::actingAs($fixture['user']);
@@ -115,5 +116,20 @@ final class ShowControllerTest extends TestCase
         $response->assertOk();
         $response->assertJson(['meta' => ['pagination' => ['total' => 1]]]);
         self::assertSame((string) $activeGroup->id, $response->json('data.0.id'));
+    }
+
+    public function testShowWithoutExplicitGroupUsesSelectedDefaultAcrossMembers(): void
+    {
+        $fixture       = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $activeCreator = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
+        $activeGroup   = $this->createWithdrawalInGroup($activeCreator, $fixture['active_group']);
+
+        Passport::actingAs($fixture['user']);
+
+        $response = $this->getJson(route('api.v1.transactions.show', ['transactionGroup' => $activeGroup->id]));
+
+        $response->assertOk();
+        self::assertSame((string) $activeGroup->id, $response->json('data.id'));
+        self::assertSame($fixture['active_group']->id, $fixture['user']->refresh()->user_group_id);
     }
 }

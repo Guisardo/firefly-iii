@@ -28,10 +28,14 @@ use FireflyIII\Events\Model\UserGroup\SharedAdministrationAccessDenied;
 use FireflyIII\Events\Model\UserGroup\SharedAdministrationGroupSelected;
 use FireflyIII\Models\GroupMembership;
 use FireflyIII\Models\UserGroup;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use FireflyIII\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class AdministrationResolver
 {
@@ -46,7 +50,9 @@ class AdministrationResolver
     public function resolve(Request $request, array $acceptedRoles): ?AdministrationContext
     {
         $this->context->clear();
-        if (!$this->hasExplicitUserGroupId($request)) {
+        $explicitParameter = ResolvesUserGroupParameter::hasExplicitUserGroup($request);
+        $routeGroupId      = $this->routeUserGroupId($request);
+        if (!$explicitParameter && null === $routeGroupId && [] === $acceptedRoles) {
             return null;
         }
 
@@ -61,8 +67,8 @@ class AdministrationResolver
             throw $this->deny((string) trans('validation.no_accepted_roles_defined'));
         }
 
-        $groupId = $this->requestedUserGroupId($request);
-        if (null === $groupId) {
+        [$groupId, $source] = $this->resolveUserGroupId($request, $user, $explicitParameter, $routeGroupId);
+        if ($groupId < 1) {
             throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
         }
 
@@ -70,6 +76,9 @@ class AdministrationResolver
         $userGroup = UserGroup::query()->find($groupId);
         if (null === $userGroup) {
             $this->auditDenied($user, $groupId, $acceptedRoles, 'missing_group');
+            if (AdministrationContext::SOURCE_ROUTE === $source) {
+                throw new NotFoundHttpException();
+            }
 
             throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
         }
@@ -81,6 +90,9 @@ class AdministrationResolver
         ;
         if (!$membershipQuery->exists()) {
             $this->auditDenied($user, $groupId, $acceptedRoles, 'missing_membership');
+            if (AdministrationContext::SOURCE_ROUTE === $source) {
+                throw new NotFoundHttpException();
+            }
 
             throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
         }
@@ -97,7 +109,7 @@ class AdministrationResolver
             throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
         }
 
-        $this->context->set($user, $userGroup, $acceptedRoles);
+        $this->context->set($user, $userGroup, $acceptedRoles, $source);
         $request->attributes->set(AdministrationContext::REQUEST_ATTRIBUTE, $this->context);
         $request->attributes->set('userGroup', $userGroup);
         $request->attributes->set('user_group', $userGroup);
@@ -108,43 +120,48 @@ class AdministrationResolver
         return $this->context;
     }
 
-    private function hasExplicitUserGroupId(Request $request): bool
+    private function resolveUserGroupId(Request $request, User $user, bool $explicitParameter, ?int $routeGroupId): array
     {
-        if ($request->query->has('user_group_id') || $request->request->has('user_group_id')) {
-            return true;
+        if (!$explicitParameter && null === $routeGroupId) {
+            return [(int) $user->user_group_id, AdministrationContext::SOURCE_SELECTED_DEFAULT];
         }
 
-        return $request->isJson() && $request->json()->has('user_group_id');
+        try {
+            $parameterGroupId = ResolvesUserGroupParameter::resolveExplicit($request);
+        } catch (ConflictHttpException|ValidationException) {
+            throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
+        }
+
+        if (null !== $routeGroupId && null !== $parameterGroupId && $routeGroupId !== $parameterGroupId) {
+            throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
+        }
+
+        if (null !== $parameterGroupId) {
+            return [$parameterGroupId, AdministrationContext::SOURCE_EXPLICIT];
+        }
+
+        return [(int) $routeGroupId, AdministrationContext::SOURCE_ROUTE];
     }
 
-    private function requestedUserGroupId(Request $request): ?int
+    private function routeUserGroupId(Request $request): ?int
     {
-        if ($request->query->has('user_group_id')) {
-            return $this->normalizeUserGroupId($request->query->all()['user_group_id'] ?? null);
+        $route = $request->route();
+        if (null === $route) {
+            return null;
         }
-        if ($request->isJson() && $request->json()->has('user_group_id')) {
-            return $this->normalizeUserGroupId($request->json('user_group_id'));
+
+        $parameter = $route->parameter('userGroup');
+        if ($parameter instanceof UserGroup) {
+            return $parameter->id;
         }
-        if ($request->request->has('user_group_id')) {
-            return $this->normalizeUserGroupId($request->request->all()['user_group_id'] ?? null);
+        if (is_int($parameter) && $parameter > 0) {
+            return $parameter;
+        }
+        if (is_string($parameter) && 1 === preg_match('/^[1-9][0-9]*$/', $parameter)) {
+            return (int) $parameter;
         }
 
         return null;
-    }
-
-    private function normalizeUserGroupId(mixed $value): ?int
-    {
-        if (is_int($value) && $value > 0) {
-            return $value;
-        }
-        if (!is_string($value) || !preg_match('/^[1-9][0-9]*$/', $value)) {
-            return null;
-        }
-        if (strlen($value) > strlen((string) PHP_INT_MAX) || (strlen($value) === strlen((string) PHP_INT_MAX) && strcmp($value, (string) PHP_INT_MAX) > 0)) {
-            return null;
-        }
-
-        return (int) $value;
     }
 
     private function deny(string $message): AuthorizationException

@@ -26,24 +26,20 @@ namespace FireflyIII\Support\Http\Controllers;
 
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
+use FireflyIII\Support\Http\SharedAdministration\RouteRoleResolver;
+use FireflyIII\User;
 use Illuminate\Contracts\Pagination\Paginator;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\AbstractPaginator;
+use Illuminate\Support\Facades\View;
 
 trait UsesSharedAdministrationContext
 {
     protected function resolvedUserGroup(): ?UserGroup
     {
-        $context = request()->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE);
-        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
-            return $context->userGroup();
-        }
-
-        if (!app()->bound(AdministrationContext::class)) {
-            return null;
-        }
-
-        $context = app(AdministrationContext::class);
-        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+        $context = $this->resolvedAdministrationContext();
+        if ($context instanceof AdministrationContext) {
             return $context->userGroup();
         }
 
@@ -64,5 +60,73 @@ trait UsesSharedAdministrationContext
         if (null !== $userGroup && method_exists($paginator, 'appends')) {
             $paginator->appends(['user_group_id' => $userGroup->id]);
         }
+    }
+
+    protected function resolvedUserGroupQuery(): array
+    {
+        $userGroup = $this->resolvedUserGroup();
+
+        return null === $userGroup ? [] : ['user_group_id' => $userGroup->id];
+    }
+
+    private function resolvedAdministrationContext(): ?AdministrationContext
+    {
+        $context = request()->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE);
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            $this->shareResolvedUserGroup($context->userGroup());
+
+            return $context;
+        }
+
+        if (!app()->bound(AdministrationContext::class)) {
+            return null;
+        }
+
+        $context = app(AdministrationContext::class);
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            $this->shareResolvedUserGroup($context->userGroup());
+
+            return $context;
+        }
+
+        return $this->resolveSelectedUserGroup(request());
+    }
+
+    private function resolveSelectedUserGroup(Request $request): ?AdministrationContext
+    {
+        if ($this->requestHasUserGroupId($request)) {
+            return null;
+        }
+
+        $user = $request->user() ?? auth()->user();
+        if (!$user instanceof User || (int) $user->user_group_id <= 0) {
+            return null;
+        }
+
+        $acceptedRoles = app(RouteRoleResolver::class)->acceptedRolesFor($request);
+        if ([] === $acceptedRoles) {
+            return null;
+        }
+
+        $context = app(AdministrationResolver::class)->resolve($request, $acceptedRoles);
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            $this->shareResolvedUserGroup($context->userGroup());
+
+            return $context;
+        }
+
+        return null;
+    }
+
+    private function requestHasUserGroupId(Request $request): bool
+    {
+        return $request->query->has('user_group_id')
+            || $request->request->has('user_group_id')
+            || ($request->isJson() && $request->json()->has('user_group_id'));
+    }
+
+    private function shareResolvedUserGroup(UserGroup $userGroup): void
+    {
+        View::share('userGroupId', $userGroup->id);
     }
 }

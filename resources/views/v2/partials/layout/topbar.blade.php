@@ -1,5 +1,5 @@
 @php
-    $selectedUserGroupId = request()->integer('user_group_id');
+    $selectedUserGroupId = (int) ($userGroupId ?? request()->integer('user_group_id'));
     $scopedRoute = static function (string $route, array $parameters = []) use ($selectedUserGroupId): string {
         if ($selectedUserGroupId > 0) {
             $parameters['user_group_id'] = $selectedUserGroupId;

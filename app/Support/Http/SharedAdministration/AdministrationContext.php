@@ -31,26 +31,29 @@ use LogicException;
 class AdministrationContext
 {
     public const string REQUEST_ATTRIBUTE = 'firefly_shared_administration';
+    public const string SOURCE_EXPLICIT = 'explicit';
+    public const string SOURCE_ROUTE = 'route';
+    public const string SOURCE_SELECTED_DEFAULT = 'selected_default';
 
     private ?User $user                = null;
     private ?UserGroup $userGroup      = null;
     private array $acceptedRoles       = [];
-    private bool $explicitUserGroupId  = false;
+    private ?string $source            = null;
 
     public function clear(): void
     {
         $this->user                = null;
         $this->userGroup           = null;
         $this->acceptedRoles       = [];
-        $this->explicitUserGroupId = false;
+        $this->source              = null;
     }
 
-    public function set(User $user, UserGroup $userGroup, array $acceptedRoles): void
+    public function set(User $user, UserGroup $userGroup, array $acceptedRoles, string $source = self::SOURCE_EXPLICIT): void
     {
         $this->user                = $user;
         $this->userGroup           = $userGroup;
         $this->acceptedRoles       = $acceptedRoles;
-        $this->explicitUserGroupId = true;
+        $this->source              = $source;
     }
 
     public function hasResolvedAdministration(): bool
@@ -60,7 +63,12 @@ class AdministrationContext
 
     public function hasExplicitUserGroupId(): bool
     {
-        return $this->explicitUserGroupId;
+        return in_array($this->source, [self::SOURCE_EXPLICIT, self::SOURCE_ROUTE], true);
+    }
+
+    public function source(): ?string
+    {
+        return $this->source;
     }
 
     public function user(): User
