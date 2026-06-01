@@ -80,7 +80,7 @@
                 <div class="box-body no-padding">
                     {% if objectType != 'all' %}
                         <div class="p-2">
-                            <a href="{{ route('transactions.create', [objectType]) }}" class="btn btn-success"><span class="fa fa-plus fa-fw"></span> {{ 'create_new_transaction'|_ }}</a>
+                            <a href="{{ route('transactions.create', [objectType]) }}{{ userGroupQuery }}" class="btn btn-success"><span class="fa fa-plus fa-fw"></span> {{ 'create_new_transaction'|_ }}</a>
                         </div>
                     {% endif %}
                     {# actual list #}

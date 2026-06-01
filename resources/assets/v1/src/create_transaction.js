@@ -46,6 +46,38 @@ import Bill from "./components/transactions/Bill";
 
 require('./bootstrap');
 
+function selectedUserGroupId() {
+    const pageUserGroupId = parseInt(window.userGroupId ?? 0);
+    if (pageUserGroupId > 0) {
+        return pageUserGroupId;
+    }
+
+    const queryParams = new URLSearchParams(window.location.search);
+    const queryUserGroupId = parseInt(queryParams.get('user_group_id') ?? 0);
+
+    return queryUserGroupId > 0 ? queryUserGroupId : 0;
+}
+
+function scopedUrl(url) {
+    const userGroupId = selectedUserGroupId();
+    if (userGroupId <= 0 || typeof url !== 'string' || !url.includes('api/v1/')) {
+        return url;
+    }
+
+    const parsed = new URL(url, document.getElementsByTagName('base')[0].href);
+    if (!parsed.searchParams.has('user_group_id')) {
+        parsed.searchParams.set('user_group_id', userGroupId);
+    }
+
+    return parsed.href;
+}
+
+window.axios.interceptors.request.use((config) => {
+    config.url = scopedUrl(config.url);
+
+    return config;
+});
+
 // components for create and edit transactions.
 Vue.component('budget', Budget);
 Vue.component('bill', Bill);

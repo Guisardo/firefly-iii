@@ -50,6 +50,20 @@ final class WebWriteControllerTest extends TestCase
         $response->assertSee(sprintf('/transactions/create/withdrawal?user_group_id=%d', $fixture['requested_group']->id), false);
     }
 
+    public function testV1TransactionCreateExposesExplicitRequestedAdministrationForClientRequests(): void
+    {
+        config()->set('view.layout', 'v1');
+
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        $this->actingAs($fixture['user']);
+
+        $response = $this->get(route('transactions.create', ['withdrawal', 'user_group_id' => $fixture['requested_group']->id]));
+
+        $response->assertOk();
+        $response->assertSee(sprintf('window.userGroupId = %d;', $fixture['requested_group']->id), false);
+        $response->assertSee(sprintf('/transactions/create/withdrawal?user_group_id=%d', $fixture['requested_group']->id), false);
+    }
+
     public function testTransactionCreateDeniesExplicitRequestedAdministrationForReadOnlyUser(): void
     {
         $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);

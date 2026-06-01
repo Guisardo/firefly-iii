@@ -30,6 +30,7 @@ use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\TransactionGroup\TransactionGroupRepositoryInterface;
 use FireflyIII\Services\Internal\Update\GroupCloneService;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use FireflyIII\Support\Facades\FireflyConfig;
 use FireflyIII\Support\Facades\Preferences;
 use Illuminate\Contracts\View\Factory;
@@ -47,6 +48,8 @@ use function Safe\parse_url;
  */
 final class CreateController extends Controller
 {
+    use UsesSharedAdministrationContext;
+
     protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
     private TransactionGroupRepositoryInterface $repository;
 
@@ -163,6 +166,7 @@ final class CreateController extends Controller
             'accountToTypes'       => $accountToTypes,
             'sourceId'             => $sourceId,
             'destinationId'        => $destinationId,
+            'userGroupId'          => $this->resolvedUserGroup()?->id,
         ]);
     }
 }

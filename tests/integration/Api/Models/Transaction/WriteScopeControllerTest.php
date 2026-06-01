@@ -67,6 +67,7 @@ final class WriteScopeControllerTest extends TestCase
             ->latest('id')
             ->firstOrFail()
         ;
+        $this->assertSame((string) $transactionGroup->id, $response->json('data.id'));
         $this->assertSame($this->fixture['requested_group']->id, $transactionGroup->user_group_id);
         $this->assertSame($this->fixture['requested_group']->id, $transactionGroup->transactionJournals()->firstOrFail()->user_group_id);
         $this->assertSame($this->fixture['active_group']->id, $this->user->refresh()->user_group_id);
@@ -194,6 +195,7 @@ final class WriteScopeControllerTest extends TestCase
 
         $response->assertUnauthorized();
         $this->assertDatabaseMissing('transaction_groups', ['title' => 'Explicit requested-group transaction']);
+        $this->assertSame($fixture['active_group']->id, $fixture['user']->refresh()->user_group_id);
 
         $response = $this->putJson(route('api.v1.transactions.update', ['transactionGroup' => $group->id]), [
             'user_group_id' => $fixture['requested_group']->id,

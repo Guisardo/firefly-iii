@@ -7,7 +7,7 @@
 {% block content %}
     <div id="create_transaction"></div>
 {% endblock %}
-{% block scripts %}
+{% block definitions %}
     <script type="text/javascript" nonce="{{ JS_NONCE }}">
         var allowedOpposingTypes = {{ allowedOpposingTypes|json_encode|raw }};
         var accountToTypes = {{ accountToTypes|json_encode|raw }};
@@ -16,5 +16,6 @@
         var previousUrl = '{{ previousUrl }}';
         window.sourceId = {{ sourceId }};
         window.destinationId = {{ destinationId }};
+        window.userGroupId = {{ userGroupId|default(0) }};
     </script>
 {% endblock %}
