@@ -370,12 +370,6 @@ jobs:
               | .buildDefinition.externalParameters.immutableTag = $immutable_tag
               | .buildDefinition.externalParameters.movingTag = $moving_tag
               | .buildDefinition.externalParameters.digest = $digest
-              | .subject = [
-                  {
-                    name: $image,
-                    digest: { sha256: ($digest | sub("^sha256:"; "")) }
-                  }
-                ]
             ' build/release/provenance-predicate.template.json > build/release/provenance-predicate.json
 
           jq -e . build/release/provenance-predicate.json >/dev/null
@@ -391,7 +385,7 @@ jobs:
 
           cosign sign --yes "$image_ref"
           cosign attest --yes --type cyclonedx --predicate build/release/sbom.cdx.json "$image_ref"
-          cosign attest --yes --type slsaprovenance --predicate build/release/provenance-predicate.json "$image_ref"
+          cosign attest --yes --type slsaprovenance1 --predicate build/release/provenance-predicate.json "$image_ref"
 
       - name: Verify signature and attestations
         run: |
@@ -411,7 +405,7 @@ jobs:
             "$image_ref" > build/release/cosign-sbom-verify.txt
 
           cosign verify-attestation \
-            --type slsaprovenance \
+            --type slsaprovenance1 \
             --certificate-identity-regexp "$identity_regexp" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "$image_ref" > build/release/cosign-provenance-verify.txt
