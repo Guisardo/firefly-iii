@@ -142,6 +142,14 @@ final class WebReadControllerTest extends TestCase
         $response->assertForbidden();
     }
 
+    public function testAdministrationsIndexRendersV2PageStateScript(): void
+    {
+        $response = $this->get(route('administrations.index'));
+
+        $response->assertOk();
+        $response->assertSee('window.fireflyPageState', false);
+    }
+
     #[Override]
     protected function setUp(): void
     {
