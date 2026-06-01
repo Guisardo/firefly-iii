@@ -204,3 +204,28 @@ Requests with `user_group_id` must also be request-scoped:
 - Stamp newly created group-owned records with the effective group id.
 - Never persist the override into `users.user_group_id`.
 - Never switch the user's UI active group as a side effect.
+
+## v1 compatibility contract
+
+The explicit shared-administration parameter is additive for v1 clients.
+Existing v1 clients that do not send `user_group_id` continue to use the
+authenticated user's active/default administration exactly as before. The
+server must not require older clients to discover, send, or cache group ids for
+the current active administration.
+
+Clients that opt in by sending `user_group_id` are asking for request-scoped
+authorization only. A successful explicit request does not switch the user's
+active administration, and a denied explicit request does not repair, clear, or
+replace `users.user_group_id`. The only v1 route family allowed to mutate the
+active/default selector is the documented user-group switch endpoint when that
+endpoint is implemented and authorized.
+
+For endpoint documentation and OpenAPI generation, `user_group_id` should be
+documented only on migrated group-owned endpoints. Unsupported endpoints should
+not include the parameter in generated examples, and local route docs should
+state that sending it to unsupported endpoints is rejected instead of silently
+ignored.
+
+The local Firefly III source tree currently has no checked-in OpenAPI YAML or
+JSON document. Until one is added, this document and the route-surface inventory
+are the compatibility source of truth for the Guisardo fork.

@@ -28,7 +28,10 @@ use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\UserGroup\DestroyRequest;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 final class DestroyController extends Controller
 {
@@ -38,8 +41,10 @@ final class DestroyController extends Controller
     {
         parent::__construct();
         $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user             = auth()->user();
             $this->repository = app(UserGroupRepositoryInterface::class);
-            $this->repository->setUser(auth()->user());
+            $this->repository->setUser($user);
 
             return $next($request);
         });
@@ -47,7 +52,9 @@ final class DestroyController extends Controller
 
     public function destroy(DestroyRequest $request, UserGroup $userGroup): JsonResponse
     {
+        Log::debug(sprintf('Now in %s', __METHOD__));
         $this->repository->destroy($userGroup);
+        Preferences::mark();
 
         return response()->json([], 204);
     }

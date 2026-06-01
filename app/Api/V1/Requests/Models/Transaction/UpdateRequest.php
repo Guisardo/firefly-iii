@@ -24,10 +24,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Requests\Models\Transaction;
 
-use FireflyIII\Api\V1\Requests\Models\Concerns\ValidatesSelectedUserGroup;
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\TransactionGroup;
+use FireflyIII\Models\UserGroup;
+use FireflyIII\Rules\BelongsUser;
+use FireflyIII\Rules\BelongsUserGroup;
 use FireflyIII\Rules\IsBoolean;
 use FireflyIII\Rules\IsDateOrTime;
 use FireflyIII\Rules\IsValidPositiveAmount;
@@ -40,21 +42,19 @@ use FireflyIII\Validation\TransactionValidation;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Log;
+use FireflyIII\User;
 
 /**
  * Class UpdateRequest
  */
 class UpdateRequest extends FormRequest
 {
-    use ChecksLogin {
-        authorize as authorizeLoggedIn;
-    }
+    use ChecksLogin;
     use ConvertsDataTypes;
     use GroupValidation;
     use TransactionValidation;
-    use ValidatesSelectedUserGroup;
 
-    protected array $acceptedRoles = [];
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
 
     private array $arrayFields;
     private array $booleanFields;
@@ -66,20 +66,34 @@ class UpdateRequest extends FormRequest
 
     public function authorize(): bool
     {
-        if (!$this->authorizeLoggedIn()) {
+        if (!auth()->check()) {
             return false;
         }
 
-        if (!$this->authorizeSelectedUserGroup([UserRoleEnum::MANAGE_TRANSACTIONS])) {
+        /** @var User $user */
+        $user = auth()->user();
+        if (true === (bool) $user->blocked) {
             return false;
         }
-        if (null === $this->selectedUserGroupId()) {
-            return true;
+
+        $userGroup = $this->getUserGroup();
+        if (!$userGroup instanceof UserGroup) {
+            return false;
         }
 
         $transactionGroup = $this->route()?->parameter('transactionGroup');
+        if ($transactionGroup instanceof TransactionGroup && $transactionGroup->user_group_id !== $userGroup->id) {
+            return false;
+        }
 
-        return $transactionGroup instanceof TransactionGroup && (int) $transactionGroup->user_group_id === $this->selectedUserGroupId();
+        /** @var UserRoleEnum $role */
+        foreach ($this->acceptedRoles as $role) {
+            if ($user->hasRoleInGroupOrOwner($userGroup, $role)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -164,10 +178,12 @@ class UpdateRequest extends FormRequest
     {
         Log::debug(sprintf('Now in %s', __METHOD__));
         $validProtocols = FireflyConfig::get('valid_url_protocols', config('firefly.valid_url_protocols'))->data;
+        $belongsRule    = $this->ownershipRule();
 
         return [
+            'user_group_id'                         => ['nullable', 'integer', 'min:1'],
+
             // basic fields for group:
-            'user_group_id'                         => $this->userGroupIdRule(),
             'group_title'                           => ['min:1', 'max:1000', 'nullable'],
             'apply_rules'                           => [new IsBoolean()],
 
@@ -177,7 +193,7 @@ class UpdateRequest extends FormRequest
             'transactions.*.order'                  => ['numeric', 'min:0'],
 
             // group id:
-            'transactions.*.transaction_journal_id' => ['nullable', 'numeric', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.transaction_journal_id' => ['nullable', 'numeric', $belongsRule],
 
             // currency info
             'transactions.*.currency_id'            => ['numeric', 'exists:transaction_currencies,id', 'nullable'],
@@ -193,20 +209,20 @@ class UpdateRequest extends FormRequest
             'transactions.*.description'            => ['nullable', 'min:1', 'max:1000'],
 
             // source of transaction
-            'transactions.*.source_id'              => ['numeric', 'nullable', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.source_id'              => ['numeric', 'nullable', $belongsRule],
             'transactions.*.source_name'            => ['min:1', 'max:255', 'nullable'],
 
             // destination of transaction
-            'transactions.*.destination_id'         => ['numeric', 'nullable', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.destination_id'         => ['numeric', 'nullable', $belongsRule],
             'transactions.*.destination_name'       => ['min:1', 'max:255', 'nullable'],
 
             // budget, category, bill and piggy
-            'transactions.*.budget_id'              => ['mustExist:budgets,id', $this->belongsUserOrSelectedUserGroup(), 'nullable'],
-            'transactions.*.budget_name'            => ['min:1', 'max:255', 'nullable', $this->belongsUserOrSelectedUserGroup()],
-            'transactions.*.category_id'            => ['mustExist:categories,id', $this->belongsUserOrSelectedUserGroup(), 'nullable'],
+            'transactions.*.budget_id'              => ['mustExist:budgets,id', $belongsRule, 'nullable'],
+            'transactions.*.budget_name'            => ['min:1', 'max:255', 'nullable', $belongsRule],
+            'transactions.*.category_id'            => ['mustExist:categories,id', $belongsRule, 'nullable'],
             'transactions.*.category_name'          => ['min:1', 'max:255', 'nullable'],
-            'transactions.*.bill_id'                => ['numeric', 'nullable', 'mustExist:bills,id', $this->belongsUserOrSelectedUserGroup()],
-            'transactions.*.bill_name'              => ['min:1', 'max:255', 'nullable', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.bill_id'                => ['numeric', 'nullable', 'mustExist:bills,id', $belongsRule],
+            'transactions.*.bill_name'              => ['min:1', 'max:255', 'nullable', $belongsRule],
 
             // other interesting fields
             'transactions.*.reconciled'             => [new IsBoolean()],
@@ -273,7 +289,7 @@ class UpdateRequest extends FormRequest
 
             // validate that the currency fits the source and/or destination account.
             // validate all account info
-            $this->validateAccountInformationUpdate($validator, $transactionGroup);
+            $this->validateAccountInformationUpdate($validator, $transactionGroup, $this->has('user_group_id') ? $this->getUserGroup() : null);
         });
         if ($validator->fails()) {
             Log::channel('audit')->error(sprintf('Validation errors in %s', self::class), $validator->errors()->toArray());
@@ -430,5 +446,14 @@ class UpdateRequest extends FormRequest
         }
 
         return $return;
+    }
+
+    private function ownershipRule(): BelongsUser|BelongsUserGroup
+    {
+        if ($this->has('user_group_id') && null !== $this->getUserGroup()) {
+            return new BelongsUserGroup($this->getUserGroup());
+        }
+
+        return new BelongsUser();
     }
 }

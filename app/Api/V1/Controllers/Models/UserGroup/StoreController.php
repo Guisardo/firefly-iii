@@ -27,8 +27,11 @@ namespace FireflyIII\Api\V1\Controllers\Models\UserGroup;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\UserGroup\StoreRequest;
 use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
+use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Transformers\UserGroupTransformer;
+use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 final class StoreController extends Controller
 {
@@ -40,8 +43,10 @@ final class StoreController extends Controller
     {
         parent::__construct();
         $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user             = auth()->user();
             $this->repository = app(UserGroupRepositoryInterface::class);
-            $this->repository->setUser(auth()->user());
+            $this->repository->setUser($user);
 
             return $next($request);
         });
@@ -49,8 +54,9 @@ final class StoreController extends Controller
 
     public function store(StoreRequest $request): JsonResponse
     {
-        $userGroup = $this->repository->store($request->getData());
-        $userGroup->refresh();
+        Log::debug(sprintf('Now in %s', __METHOD__));
+        $userGroup   = $this->repository->store($request->getData());
+        Preferences::mark();
 
         $transformer = new UserGroupTransformer();
         $transformer->setParameters($this->parameters);

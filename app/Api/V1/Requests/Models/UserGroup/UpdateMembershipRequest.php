@@ -2,7 +2,7 @@
 
 /*
  * UpdateMembershipRequest.php
- * Copyright (c) 2026 james@firefly-iii.org
+ * Copyright (c) 2026 james@firefly-iii.org.
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
  *
@@ -17,7 +17,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program.  If not, see https://www.gnu.org/licenses/.
  */
 
 declare(strict_types=1);
@@ -27,11 +27,11 @@ namespace FireflyIII\Api\V1\Requests\Models\UserGroup;
 use FireflyIII\Api\V1\Requests\Models\UserGroup\Concerns\AuthorizesUserGroupRequests;
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\UserGroup;
-use FireflyIII\Models\UserRole;
+use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
 use FireflyIII\User;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Validator;
+use Illuminate\Validation\Rule;
 
 class UpdateMembershipRequest extends FormRequest
 {
@@ -42,114 +42,69 @@ class UpdateMembershipRequest extends FormRequest
 
     public function authorize(): bool
     {
-        if (!$this->authorizeRouteUserGroup($this->acceptedRoles)) {
-            return false;
-        }
-
-        if (!$this->changesOwnerRole()) {
-            return true;
-        }
-
-        $userGroup = $this->route()?->parameter('userGroup');
-
+        $userGroup = $this->route('userGroup');
         if (!$userGroup instanceof UserGroup) {
             return false;
         }
 
-        return $this->actingUserHasRoleInGroup($userGroup, UserRoleEnum::OWNER);
+        if (!$this->authorizeRouteUserGroup($this->acceptedRoles)) {
+            return false;
+        }
+
+        /** @var User $actor */
+        $actor          = auth()->user();
+        $target = $this->targetUser();
+        if (null !== $target && true === (bool) $target->blocked) {
+            return false;
+        }
+
+        $requestedRoles = $this->requestedRoles();
+        $targetIsOwner  = null !== $target && $this->hasSpecificGroupRole($target, $userGroup, UserRoleEnum::OWNER);
+        $changesOwner   = in_array(UserRoleEnum::OWNER->value, $requestedRoles, true) || ($targetIsOwner && !in_array(UserRoleEnum::OWNER->value, $requestedRoles, true));
+
+        if ($changesOwner && !$this->actingUserHasRoleInGroup($userGroup, UserRoleEnum::OWNER)) {
+            return false;
+        }
+
+        return true;
     }
 
     public function getData(): array
     {
-        $data = [
+        return [
+            'id'    => $this->convertInteger('id'),
             'email' => $this->convertString('email'),
-            'roles' => $this->arrayFromValue($this->get('roles')) ?? [],
+            'roles' => $this->get('roles') ?? [],
         ];
-        if ($this->has('id')) {
-            $data['id'] = $this->convertInteger('id');
-        }
-
-        return $data;
     }
 
     public function rules(): array
     {
+        $roles = array_map(static fn (UserRoleEnum $role): string => $role->value, UserRoleEnum::cases());
+
         return [
-            'id'      => ['required_without:email', 'nullable', 'integer', 'exists:users,id'],
-            'email'   => ['required_without:id', 'nullable', 'email', 'exists:users,email'],
+            'id'      => ['nullable', 'integer', 'exists:users,id', 'required_without:email'],
+            'email'   => ['nullable', 'email', 'exists:users,email', 'required_without:id'],
             'roles'   => ['present', 'array'],
-            'roles.*' => sprintf('in:%s', implode(',', array_map(static fn (UserRoleEnum $role): string => $role->value, UserRoleEnum::cases()))),
+            'roles.*' => ['string', Rule::in($roles)],
         ];
     }
 
-    public function withValidator(Validator $validator): void
+    private function requestedRoles(): array
     {
-        $validator->after(function (Validator $validator): void {
-            $userGroup = $this->route()?->parameter('userGroup');
-            $target    = $this->targetUser();
+        $roles = $this->get('roles');
 
-            if (!$userGroup instanceof UserGroup || !$target instanceof User) {
-                return;
-            }
-
-            if ($this->changesOwnerRole() && !$this->actingUserIsOwner($userGroup)) {
-                $validator->errors()->add('roles', 'Only owners can grant or revoke the owner role.');
-            }
-            if ($this->wouldRemoveLastOwner($target, $userGroup)) {
-                $validator->errors()->add('roles', 'The last owner in this user group must keep the owner role.');
-            }
-        });
-    }
-
-    private function changesOwnerRole(): bool
-    {
-        $userGroup = $this->route()?->parameter('userGroup');
-        $target    = $this->targetUser();
-
-        if (!$userGroup instanceof UserGroup || !$target instanceof User) {
-            return in_array(UserRoleEnum::OWNER->value, $this->arrayFromValue($this->get('roles')) ?? [], true);
-        }
-
-        $hasOwner  = $this->userHasRoleInGroup($target, $userGroup, UserRoleEnum::OWNER);
-        $getsOwner = in_array(UserRoleEnum::OWNER->value, $this->arrayFromValue($this->get('roles')) ?? [], true);
-
-        return $hasOwner !== $getsOwner;
-    }
-
-    private function actingUserIsOwner(UserGroup $userGroup): bool
-    {
-        return $this->actingUserHasRoleInGroup($userGroup, UserRoleEnum::OWNER);
-    }
-
-    private function wouldRemoveLastOwner(User $target, UserGroup $userGroup): bool
-    {
-        if (!$this->userHasRoleInGroup($target, $userGroup, UserRoleEnum::OWNER)) {
-            return false;
-        }
-        if (in_array(UserRoleEnum::OWNER->value, $this->arrayFromValue($this->get('roles')) ?? [], true)) {
-            return false;
-        }
-
-        /** @var null|UserRole $ownerRole */
-        $ownerRole = UserRole::whereTitle(UserRoleEnum::OWNER->value)->first();
-        if (null === $ownerRole) {
-            return true;
-        }
-
-        return 0 === $userGroup->groupMemberships()
-            ->where('user_role_id', $ownerRole->id)
-            ->where('user_id', '!=', $target->id)
-            ->count()
-        ;
+        return is_array($roles) ? $roles : [];
     }
 
     private function targetUser(): ?User
     {
-        if ($this->has('id')) {
-            return User::find($this->convertInteger('id'));
+        $id = (int) $this->get('id');
+        if ($id > 0) {
+            return User::find($id);
         }
 
-        $email = $this->convertString('email');
+        $email = (string) $this->get('email');
         if ('' !== $email) {
             return User::whereEmail($email)->first();
         }
@@ -157,17 +112,11 @@ class UpdateMembershipRequest extends FormRequest
         return null;
     }
 
-    private function userHasRoleInGroup(User $user, UserGroup $userGroup, UserRoleEnum $role): bool
+    private function hasSpecificGroupRole(User $user, UserGroup $userGroup, UserRoleEnum $role): bool
     {
-        /** @var null|UserRole $userRole */
-        $userRole = UserRole::whereTitle($role->value)->first();
-        if (null === $userRole) {
-            return false;
-        }
-
         return $user->groupMemberships()
             ->where('user_group_id', $userGroup->id)
-            ->where('user_role_id', $userRole->id)
+            ->whereHas('userRole', static fn ($query) => $query->where('title', $role->value))
             ->exists()
         ;
     }

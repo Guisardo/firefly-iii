@@ -37,10 +37,16 @@ class UserGroupTransaction implements BinderInterface
     {
         if (auth()->check()) {
             /** @var User $user */
-            $user  = auth()->user();
-            $group = TransactionGroup::query()
+            $user        = auth()->user();
+            $userGroupId = request()->has('user_group_id') ? (int) request()->get('user_group_id') : (int) $user->user_group_id;
+
+            if (0 === $user->groupMemberships()->where('user_group_id', $userGroupId)->count()) {
+                throw new NotFoundHttpException();
+            }
+
+            $group       = TransactionGroup::query()
                 ->where('id', (int) $value)
-                ->where('user_group_id', $user->user_group_id)
+                ->where('user_group_id', $userGroupId)
                 ->first()
             ;
             if (null !== $group) {

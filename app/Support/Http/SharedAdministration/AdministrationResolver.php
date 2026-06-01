@@ -24,6 +24,8 @@ declare(strict_types=1);
 
 namespace FireflyIII\Support\Http\SharedAdministration;
 
+use FireflyIII\Events\Model\UserGroup\SharedAdministrationAccessDenied;
+use FireflyIII\Events\Model\UserGroup\SharedAdministrationGroupSelected;
 use FireflyIII\Models\GroupMembership;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\User;
@@ -67,19 +69,31 @@ class AdministrationResolver
         /** @var null|UserGroup $userGroup */
         $userGroup = UserGroup::query()->find($groupId);
         if (null === $userGroup) {
+            $this->auditDenied($user, $groupId, $acceptedRoles, 'missing_group');
+
             throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
         }
 
         $allowedRoleTitles = AdministrationRoleSet::allowedTitles($acceptedRoles);
-        $membership        = GroupMembership::query()
+        $membershipQuery    = GroupMembership::query()
             ->where('user_id', $user->id)
             ->where('user_group_id', $userGroup->id)
+        ;
+        if (!$membershipQuery->exists()) {
+            $this->auditDenied($user, $groupId, $acceptedRoles, 'missing_membership');
+
+            throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
+        }
+
+        $membership        = (clone $membershipQuery)
             ->whereHas('userRole', static function ($query) use ($allowedRoleTitles): void {
                 $query->whereIn('title', $allowedRoleTitles);
             })
             ->first()
         ;
         if (null === $membership) {
+            $this->auditDenied($user, $groupId, $acceptedRoles, 'insufficient_role');
+
             throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
         }
 
@@ -89,6 +103,7 @@ class AdministrationResolver
         $request->attributes->set('user_group', $userGroup);
         $request->attributes->set('resolved_user_group', $userGroup);
         $request->attributes->set('firefly.resolved_user_group', $userGroup);
+        event(new SharedAdministrationGroupSelected($user, $userGroup, (int) $user->user_group_id, static::class, $this->acceptedRoleValues($acceptedRoles)));
 
         return $this->context;
     }
@@ -135,5 +150,15 @@ class AdministrationResolver
     private function deny(string $message): AuthorizationException
     {
         return (new AuthorizationException($message))->withStatus(403);
+    }
+
+    private function auditDenied(User $user, int $groupId, array $acceptedRoles, string $reason): void
+    {
+        event(new SharedAdministrationAccessDenied($user, $groupId, (int) $user->user_group_id, static::class, $reason, $this->acceptedRoleValues($acceptedRoles)));
+    }
+
+    private function acceptedRoleValues(array $acceptedRoles): array
+    {
+        return array_values(array_map(static fn ($role): string => $role->value, $acceptedRoles));
     }
 }

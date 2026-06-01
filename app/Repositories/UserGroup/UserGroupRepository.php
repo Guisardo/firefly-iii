@@ -181,14 +181,14 @@ class UserGroupRepository implements UserGroupRepositoryInterface, UserGroupInte
 
         /** @var CurrencyRepositoryInterface $repository */
         $repository       = app(CurrencyRepositoryInterface::class);
+        $repository->setUser($this->user);
+        $repository->setUserGroup($userGroup);
 
         if (array_key_exists('primary_currency_code', $data)) {
-            $repository->setUser($this->user);
             $currency = $repository->findByCode($data['primary_currency_code']);
         }
 
         if (array_key_exists('primary_currency_id', $data) && null === $currency) {
-            $repository->setUser($this->user);
             $currency = $repository->find((int) $data['primary_currency_id']);
         }
         if (null !== $currency) {

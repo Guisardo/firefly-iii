@@ -23,6 +23,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\Providers;
 
+use FireflyIII\Events\Model\UserGroup\SharedAdministrationAccessDenied;
+use FireflyIII\Events\Model\UserGroup\SharedAdministrationGroupSelected;
+use FireflyIII\Listeners\Model\UserGroup\LogsSharedAdministrationAccess;
+use FireflyIII\Listeners\Model\UserGroup\LogsSharedAdministrationDenial;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
 use Override;
 
@@ -34,6 +38,12 @@ use Override;
 class EventServiceProvider extends ServiceProvider
 {
     protected $listen = [
+        SharedAdministrationAccessDenied::class   => [
+            LogsSharedAdministrationDenial::class,
+        ],
+        SharedAdministrationGroupSelected::class  => [
+            LogsSharedAdministrationAccess::class,
+        ],
         // is a Transaction Journal related event.
         // StoredTransactionGroup::class          => ['FireflyIII\Handlers\Events\StoredGroupEventHandler@runAllHandlers'],
         // TriggeredStoredTransactionGroup::class => ['FireflyIII\Handlers\Events\StoredGroupEventHandler@triggerRulesManually'],

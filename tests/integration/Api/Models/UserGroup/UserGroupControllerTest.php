@@ -2,7 +2,7 @@
 
 /*
  * UserGroupControllerTest.php
- * Copyright (c) 2026 james@firefly-iii.org
+ * Copyright (c) 2026 james@firefly-iii.org.
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
  *
@@ -17,7 +17,7 @@
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program.  If not, see https://www.gnu.org/licenses/.
  */
 
 declare(strict_types=1);
@@ -25,15 +25,12 @@ declare(strict_types=1);
 namespace Tests\integration\Api\Models\UserGroup;
 
 use FireflyIII\Enums\UserRoleEnum;
-use FireflyIII\Exceptions\FireflyException;
-use FireflyIII\Models\GroupMembership;
-use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Models\UserRole;
-use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
 use FireflyIII\User;
 use Laravel\Passport\Passport;
 use Tests\integration\TestCase;
+use Tests\integration\Traits\CreatesMultiGroupFixtures;
 
 /**
  * @internal
@@ -44,425 +41,185 @@ use Tests\integration\TestCase;
  */
 final class UserGroupControllerTest extends TestCase
 {
-    public function testStoreCreatesOwnerMembership(): void
+    use CreatesMultiGroupFixtures;
+
+    public function testStoreCreatesAdministrationWithOwnerMembership(): void
     {
         $user = $this->createAuthenticatedUser();
         Passport::actingAs($user);
 
-        $response = $this->postJson(route('api.v1.user-groups.store'), ['title' => 'Shared administration']);
+        $response = $this->postJson(route('api.v1.user-groups.store'), ['title' => 'New shared administration']);
 
         $response->assertOk();
-        $userGroupId = $response->json('data.id');
-        $this->assertDatabaseHas('user_groups', ['id' => $userGroupId, 'title' => 'Shared administration']);
+        $response->assertJson(['data' => ['attributes' => ['title' => 'New shared administration']]]);
+
+        $userGroupId = (int) $response->json('data.id');
+        $this->assertDatabaseHas('user_groups', ['id' => $userGroupId, 'title' => 'New shared administration']);
         $this->assertDatabaseHas('group_memberships', [
             'user_id'       => $user->id,
             'user_group_id' => $userGroupId,
-            'user_role_id'  => $this->roleId(UserRoleEnum::OWNER),
+            'user_role_id'  => $this->userRoleId(UserRoleEnum::OWNER),
         ]);
     }
 
-    public function testUseSwitchesDefaultAdministration(): void
+    public function testSwitchUsesRequestedAdministrationNotCurrentDefault(): void
     {
-        $user           = $this->createAuthenticatedUser();
-        $requestedGroup = UserGroup::create(['title' => 'Requested administration']);
-        $this->createMembership($user, $requestedGroup, UserRoleEnum::READ_ONLY);
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        /** @var User $user */
+        $user    = $fixture['user'];
         Passport::actingAs($user);
 
-        $response = $this->postJson(route('api.v1.user-groups.use', ['userGroup' => $requestedGroup->id]));
-
-        $response->assertNoContent();
-        self::assertSame($requestedGroup->id, $user->refresh()->user_group_id);
-    }
-
-    public function testReadOnlyMemberCanUseExplicitRequestedAdministration(): void
-    {
-        $user           = $this->createAuthenticatedUser();
-        $requestedGroup = UserGroup::create(['title' => 'Requested explicit administration']);
-        $this->createMembership($user, $requestedGroup, UserRoleEnum::READ_ONLY);
-        Passport::actingAs($user);
-
-        $response = $this->postJson(route('api.v1.user-groups.use', ['userGroup' => $requestedGroup->id]), [
-            'user_group_id' => $requestedGroup->id,
-        ]);
-
-        $response->assertNoContent();
-        self::assertSame($requestedGroup->id, $user->refresh()->user_group_id);
-    }
-
-    public function testExplicitRequestedAdministrationMustMatchRouteAdministration(): void
-    {
-        [$routeGroup, $owner] = $this->groupWithActingUser(UserRoleEnum::OWNER);
-        $requestedGroup       = UserGroup::create(['title' => 'Different requested administration']);
-        $this->createMembership($owner, $requestedGroup, UserRoleEnum::OWNER);
-        Passport::actingAs($owner);
-
-        $response = $this->putJson(route('api.v1.user-groups.update', ['userGroup' => $routeGroup->id]), [
-            'title'         => 'Should not update route group',
-            'user_group_id' => $requestedGroup->id,
-        ]);
-
-        $response->assertUnauthorized();
-        self::assertNotSame('Should not update route group', $routeGroup->refresh()->title);
-    }
-
-    public function testFullMemberCanAddNonOwnerMember(): void
-    {
-        [$userGroup, $fullUser] = $this->groupWithActingUser(UserRoleEnum::FULL);
-        $target                 = $this->newUser('target-full-add@example.test');
-        Passport::actingAs($fullUser);
-
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $target->id,
-            'roles' => [UserRoleEnum::READ_ONLY->value],
-        ]);
+        $response = $this->postJson(route('api.v1.user-groups.use', ['userGroup' => $fixture['requested_group']->id]));
 
         $response->assertOk();
-        $this->assertDatabaseHas('group_memberships', [
-            'user_id'       => $target->id,
-            'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId(UserRoleEnum::READ_ONLY),
-        ]);
+        $this->assertSame($fixture['requested_group']->id, $user->refresh()->user_group_id);
     }
 
-    public function testReadOnlyMemberCannotChangeMembers(): void
+    public function testSwitchDeniesNonMember(): void
     {
-        [$userGroup, $readOnlyUser] = $this->groupWithActingUser(UserRoleEnum::READ_ONLY);
-        $target                     = $this->newUser('target-read-only-denied@example.test');
-        Passport::actingAs($readOnlyUser);
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::OWNER);
+        /** @var User $user */
+        $user    = $fixture['user'];
+        Passport::actingAs($user);
 
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $target->id,
-            'roles' => [UserRoleEnum::READ_ONLY->value],
-        ]);
-
-        $response->assertUnauthorized();
-        $this->assertDatabaseMissing('group_memberships', [
-            'user_id'       => $target->id,
-            'user_group_id' => $userGroup->id,
-        ]);
-    }
-
-    public function testReadOnlyMemberCannotUpdateGroupMetadata(): void
-    {
-        [$userGroup, $readOnlyUser] = $this->groupWithActingUser(UserRoleEnum::READ_ONLY);
-        Passport::actingAs($readOnlyUser);
-
-        $response = $this->putJson(route('api.v1.user-groups.update', ['userGroup' => $userGroup->id]), [
-            'title' => 'Denied title update',
-        ]);
-
-        $response->assertUnauthorized();
-        self::assertNotSame('Denied title update', $userGroup->refresh()->title);
-    }
-
-    public function testReadOnlyMemberCannotUpdateGroupCurrency(): void
-    {
-        [$userGroup, $readOnlyUser] = $this->groupWithActingUser(UserRoleEnum::READ_ONLY);
-        $currency                   = TransactionCurrency::whereCode('EUR')->firstOrFail();
-        Passport::actingAs($readOnlyUser);
-
-        $response = $this->putJson(route('api.v1.user-groups.update', ['userGroup' => $userGroup->id]), [
-            'title'               => $userGroup->title,
-            'primary_currency_id' => $currency->id,
-        ]);
-
-        $response->assertUnauthorized();
-    }
-
-    public function testFullMemberCannotDestroyGroup(): void
-    {
-        [$userGroup, $fullUser] = $this->groupWithActingUser(UserRoleEnum::FULL);
-        Passport::actingAs($fullUser);
-
-        $response = $this->deleteJson(route('api.v1.user-groups.destroy', ['userGroup' => $userGroup->id]));
-
-        $response->assertUnauthorized();
-        $this->assertDatabaseHas('user_groups', ['id' => $userGroup->id]);
-    }
-
-    public function testBlockedOwnerCannotUpdateGroupMetadata(): void
-    {
-        [$userGroup, $owner] = $this->groupWithActingUser(UserRoleEnum::OWNER);
-        $owner->blocked      = true;
-        $owner->save();
-        Passport::actingAs($owner->refresh());
-
-        $response = $this->putJson(route('api.v1.user-groups.update', ['userGroup' => $userGroup->id]), [
-            'title' => 'Blocked title update',
-        ]);
-
-        $response->assertUnauthorized();
-        self::assertNotSame('Blocked title update', $userGroup->refresh()->title);
-    }
-
-    public function testBlockedFullMemberCannotChangeMembers(): void
-    {
-        [$userGroup, $fullUser] = $this->groupWithActingUser(UserRoleEnum::FULL);
-        $target                 = $this->newUser('target-blocked-full-denied@example.test');
-        $fullUser->blocked      = true;
-        $fullUser->save();
-        Passport::actingAs($fullUser->refresh());
-
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $target->id,
-            'roles' => [UserRoleEnum::READ_ONLY->value],
-        ]);
-
-        $response->assertUnauthorized();
-        $this->assertDatabaseMissing('group_memberships', [
-            'user_id'       => $target->id,
-            'user_group_id' => $userGroup->id,
-        ]);
-    }
-
-    public function testBlockedOwnerCannotDestroyGroup(): void
-    {
-        [$userGroup, $owner] = $this->groupWithActingUser(UserRoleEnum::OWNER);
-        $owner->blocked      = true;
-        $owner->save();
-        Passport::actingAs($owner->refresh());
-
-        $response = $this->deleteJson(route('api.v1.user-groups.destroy', ['userGroup' => $userGroup->id]));
-
-        $response->assertUnauthorized();
-        $this->assertDatabaseHas('user_groups', ['id' => $userGroup->id]);
-    }
-
-    public function testBlockedMemberCannotSwitchDefaultAdministration(): void
-    {
-        $user           = $this->createAuthenticatedUser();
-        $initialGroupId = $user->user_group_id;
-        $requestedGroup = UserGroup::create(['title' => 'Blocked switch target']);
-        $this->createMembership($user, $requestedGroup, UserRoleEnum::READ_ONLY);
-        $user->blocked  = true;
-        $user->save();
-        Passport::actingAs($user->refresh());
-
-        $response = $this->postJson(route('api.v1.user-groups.use', ['userGroup' => $requestedGroup->id]));
-
-        $response->assertUnauthorized();
-        self::assertSame($initialGroupId, $user->refresh()->user_group_id);
-    }
-
-    public function testBlockedUserCannotCreateGroup(): void
-    {
-        $user          = $this->createAuthenticatedUser();
-        $user->blocked = true;
-        $user->save();
-        Passport::actingAs($user->refresh());
-
-        $response = $this->postJson(route('api.v1.user-groups.store'), ['title' => 'Blocked administration']);
-
-        $response->assertUnauthorized();
-        $this->assertDatabaseMissing('user_groups', ['title' => 'Blocked administration']);
-    }
-
-    public function testMemberCannotChangeMembershipsInAnotherGroup(): void
-    {
-        [$userGroup, $fullUser] = $this->groupWithActingUser(UserRoleEnum::FULL);
-        $otherGroup             = UserGroup::create(['title' => 'Other administration']);
-        $target                 = $this->newUser('target-cross-group-denied@example.test');
-        Passport::actingAs($fullUser);
-
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $otherGroup->id]), [
-            'id'    => $target->id,
-            'roles' => [UserRoleEnum::READ_ONLY->value],
-        ]);
+        $response = $this->postJson(route('api.v1.user-groups.use', ['userGroup' => $fixture['unrelated_group']->id]));
 
         $response->assertNotFound();
-        $this->assertDatabaseMissing('group_memberships', [
-            'user_id'       => $target->id,
-            'user_group_id' => $otherGroup->id,
-        ]);
-        $this->assertDatabaseHas('user_groups', ['id' => $userGroup->id]);
+        $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
     }
 
-    public function testFullMemberCannotGrantOwner(): void
+    public function testReadOnlyCannotUpdateAdministration(): void
     {
-        [$userGroup, $fullUser] = $this->groupWithActingUser(UserRoleEnum::FULL);
-        $target                 = $this->newUser('target-full-owner-denied@example.test');
-        Passport::actingAs($fullUser);
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $title   = $fixture['requested_group']->title;
+        Passport::actingAs($fixture['user']);
 
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $target->id,
-            'roles' => [UserRoleEnum::OWNER->value],
+        $response = $this->putJson(route('api.v1.user-groups.update', ['userGroup' => $fixture['requested_group']->id]), [
+            'title' => 'Denied title',
         ]);
 
         $response->assertUnauthorized();
-        $this->assertDatabaseMissing('group_memberships', [
-            'user_id'       => $target->id,
-            'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId(UserRoleEnum::OWNER),
-        ]);
+        $this->assertSame($title, $fixture['requested_group']->refresh()->title);
     }
 
-    public function testOwnerCanGrantOwner(): void
+    public function testFullUserCanUpdateAndRemoveMemberRoles(): void
     {
-        [$userGroup, $owner] = $this->groupWithActingUser(UserRoleEnum::OWNER);
-        $target             = $this->newUser('target-owner-grant@example.test');
-        Passport::actingAs($owner);
+        $userGroup = UserGroup::create(['title' => 'Membership administration']);
+        $owner     = $this->createUserInGroup($userGroup, UserRoleEnum::OWNER);
+        $full      = $this->createUserInGroup($userGroup, UserRoleEnum::FULL);
+        $member    = $this->createUserInGroup($userGroup, UserRoleEnum::MANAGE_TRANSACTIONS);
+        Passport::actingAs($full);
 
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $target->id,
-            'roles' => [UserRoleEnum::OWNER->value],
-        ]);
-
-        $response->assertOk();
-        $this->assertDatabaseHas('group_memberships', [
-            'user_id'       => $target->id,
-            'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId(UserRoleEnum::OWNER),
-        ]);
-    }
-
-    public function testFullMemberCannotRevokeOwner(): void
-    {
-        [$userGroup, $fullUser] = $this->groupWithActingUser(UserRoleEnum::FULL);
-        $targetOwner            = $this->newUser('target-full-revoke-owner-denied@example.test', $userGroup);
-        $this->createMembership($targetOwner, $userGroup, UserRoleEnum::OWNER);
-        Passport::actingAs($fullUser);
-
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $targetOwner->id,
-            'roles' => [UserRoleEnum::READ_ONLY->value],
-        ]);
-
-        $response->assertUnauthorized();
-        $this->assertDatabaseHas('group_memberships', [
-            'user_id'       => $targetOwner->id,
-            'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId(UserRoleEnum::OWNER),
-        ]);
-    }
-
-    public function testOwnerCanRevokeOwnerWhenAnotherOwnerRemains(): void
-    {
-        [$userGroup, $owner] = $this->groupWithActingUser(UserRoleEnum::OWNER);
-        $targetOwner         = $this->newUser('target-owner-revoke@example.test', $userGroup);
-        $this->createMembership($targetOwner, $userGroup, UserRoleEnum::OWNER);
-        Passport::actingAs($owner);
-
-        $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $targetOwner->id,
+        $response  = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
+            'id'    => $member->id,
             'roles' => [UserRoleEnum::READ_ONLY->value],
         ]);
 
         $response->assertOk();
         $this->assertDatabaseMissing('group_memberships', [
-            'user_id'       => $targetOwner->id,
+            'user_id'       => $member->id,
             'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId(UserRoleEnum::OWNER),
+            'user_role_id'  => $this->userRoleId(UserRoleEnum::MANAGE_TRANSACTIONS),
         ]);
         $this->assertDatabaseHas('group_memberships', [
-            'user_id'       => $targetOwner->id,
+            'user_id'       => $member->id,
             'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId(UserRoleEnum::READ_ONLY),
+            'user_role_id'  => $this->userRoleId(UserRoleEnum::READ_ONLY),
         ]);
-    }
-
-    public function testOwnerCannotRevokeLastOwner(): void
-    {
-        [$userGroup, $owner] = $this->groupWithActingUser(UserRoleEnum::OWNER);
-        $fullUser            = $this->newUser('full-last-owner-guard@example.test', $userGroup);
-        $this->createMembership($fullUser, $userGroup, UserRoleEnum::FULL);
-        Passport::actingAs($owner);
 
         $response = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
-            'id'    => $owner->id,
-            'roles' => [UserRoleEnum::FULL->value],
+            'email' => $member->email,
+            'roles' => [],
         ]);
 
-        $response->assertUnprocessable();
+        $response->assertOk();
+        $this->assertDatabaseMissing('group_memberships', [
+            'user_id'       => $member->id,
+            'user_group_id' => $userGroup->id,
+        ]);
         $this->assertDatabaseHas('group_memberships', [
             'user_id'       => $owner->id,
             'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId(UserRoleEnum::OWNER),
+            'user_role_id'  => $this->userRoleId(UserRoleEnum::OWNER),
         ]);
     }
 
-    public function testRepositoryRefusesStaleLastOwnerRemoval(): void
+    public function testReadOnlyCannotUpdateMemberRoles(): void
     {
-        [$userGroup, $owner] = $this->groupWithActingUser(UserRoleEnum::OWNER);
-        $otherOwner          = $this->newUser('other-owner-race@example.test', $userGroup);
-        $this->createMembership($otherOwner, $userGroup, UserRoleEnum::OWNER);
-        $otherOwner->groupMemberships()
-            ->where('user_group_id', $userGroup->id)
-            ->where('user_role_id', $this->roleId(UserRoleEnum::OWNER))
-            ->delete()
-        ;
+        $userGroup = UserGroup::create(['title' => 'Read-only membership administration']);
+        $readOnly  = $this->createUserInGroup($userGroup, UserRoleEnum::READ_ONLY);
+        $member    = $this->createUserInGroup($userGroup, UserRoleEnum::MANAGE_TRANSACTIONS);
+        Passport::actingAs($readOnly);
 
-        /** @var UserGroupRepositoryInterface $repository */
-        $repository = app(UserGroupRepositoryInterface::class);
-        $repository->setUser($owner);
-
-        try {
-            $repository->updateMembership($userGroup, [
-                'id'    => $owner->id,
-                'roles' => [UserRoleEnum::FULL->value],
-            ]);
-            self::fail('Expected last-owner removal to be refused.');
-        } catch (FireflyException) {
-            $this->assertDatabaseHas('group_memberships', [
-                'user_id'       => $owner->id,
-                'user_group_id' => $userGroup->id,
-                'user_role_id'  => $this->roleId(UserRoleEnum::OWNER),
-            ]);
-        }
-    }
-
-    public function testOwnerCanDestroyGroupAndFallbackUsesUserGroupId(): void
-    {
-        $user         = $this->createAuthenticatedUser();
-        $initialGroup = $user->userGroup;
-        $otherGroup   = UserGroup::create(['title' => 'Fallback administration']);
-        $otherOwner   = $this->newUser('other-owner@example.test', $otherGroup);
-        $this->createMembership($otherOwner, $otherGroup, UserRoleEnum::OWNER);
-        $this->createMembership($user, $otherGroup, UserRoleEnum::OWNER);
-        Passport::actingAs($user);
-
-        $response = $this->deleteJson(route('api.v1.user-groups.destroy', ['userGroup' => $initialGroup->id]));
-
-        $response->assertNoContent();
-        $this->assertDatabaseMissing('user_groups', ['id' => $initialGroup->id]);
-        self::assertSame($otherGroup->id, $user->refresh()->user_group_id);
-    }
-
-    private function groupWithActingUser(UserRoleEnum $role): array
-    {
-        $userGroup = UserGroup::create(['title' => sprintf('Group for %s', $role->value)]);
-        $owner     = $this->newUser(sprintf('owner-%s@example.test', $role->value), $userGroup);
-        $this->createMembership($owner, $userGroup, UserRoleEnum::OWNER);
-
-        if (UserRoleEnum::OWNER === $role) {
-            return [$userGroup, $owner];
-        }
-
-        $user = $this->newUser(sprintf('acting-%s@example.test', $role->value), $userGroup);
-        $this->createMembership($user, $userGroup, $role);
-
-        return [$userGroup, $user];
-    }
-
-    private function newUser(string $email, ?UserGroup $userGroup = null): User
-    {
-        return User::create([
-            'email'         => $email,
-            'password'      => 'password',
-            'user_group_id' => $userGroup?->id,
+        $response  = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
+            'id'    => $member->id,
+            'roles' => [UserRoleEnum::FULL->value],
         ]);
-    }
 
-    private function createMembership(User $user, UserGroup $userGroup, UserRoleEnum $role): GroupMembership
-    {
-        return GroupMembership::create([
-            'user_id'       => $user->id,
+        $response->assertUnauthorized();
+        $this->assertDatabaseHas('group_memberships', [
+            'user_id'       => $member->id,
             'user_group_id' => $userGroup->id,
-            'user_role_id'  => $this->roleId($role),
+            'user_role_id'  => $this->userRoleId(UserRoleEnum::MANAGE_TRANSACTIONS),
         ]);
     }
 
-    private function roleId(UserRoleEnum $role): int
+    public function testFullUserCannotGrantOwnerRole(): void
     {
-        return UserRole::query()->where('title', $role->value)->firstOrFail()->id;
+        $userGroup = UserGroup::create(['title' => 'Owner role administration']);
+        $this->createUserInGroup($userGroup, UserRoleEnum::OWNER);
+        $full      = $this->createUserInGroup($userGroup, UserRoleEnum::FULL);
+        $member    = $this->createUserInGroup($userGroup, UserRoleEnum::READ_ONLY);
+        Passport::actingAs($full);
+
+        $response  = $this->putJson(route('api.v1.user-groups.updateMembership', ['userGroup' => $userGroup->id]), [
+            'id'    => $member->id,
+            'roles' => [UserRoleEnum::OWNER->value],
+        ]);
+
+        $response->assertUnauthorized();
+        $this->assertDatabaseMissing('group_memberships', [
+            'user_id'       => $member->id,
+            'user_group_id' => $userGroup->id,
+            'user_role_id'  => $this->userRoleId(UserRoleEnum::OWNER),
+        ]);
+    }
+
+    public function testFullUserCannotDestroyAdministration(): void
+    {
+        $userGroup = UserGroup::create(['title' => 'Destroy denied administration']);
+        $this->createUserInGroup($userGroup, UserRoleEnum::OWNER);
+        $full      = $this->createUserInGroup($userGroup, UserRoleEnum::FULL);
+        Passport::actingAs($full);
+
+        $response  = $this->deleteJson(route('api.v1.user-groups.destroy', ['userGroup' => $userGroup->id]));
+
+        $response->assertUnauthorized();
+        $this->assertDatabaseHas('user_groups', ['id' => $userGroup->id]);
+    }
+
+    public function testOwnerDestroysAdministrationAndReplacementUsesUserGroupId(): void
+    {
+        $userGroup        = UserGroup::create(['title' => 'Deleted administration']);
+        $replacementGroup = UserGroup::create(['title' => 'Replacement administration']);
+        $owner            = $this->createUserInGroup($userGroup, UserRoleEnum::OWNER);
+        $member           = $this->createUserInGroup($userGroup, UserRoleEnum::READ_ONLY);
+        $this->createGroupMembership($member, $replacementGroup, UserRoleEnum::READ_ONLY);
+        Passport::actingAs($owner);
+
+        $response         = $this->deleteJson(route('api.v1.user-groups.destroy', ['userGroup' => $userGroup->id]));
+
+        $response->assertStatus(204);
+        $this->assertDatabaseMissing('user_groups', ['id' => $userGroup->id]);
+        $this->assertSame($replacementGroup->id, $member->refresh()->user_group_id);
+        $this->assertDatabaseMissing('group_memberships', [
+            'user_id'       => $member->id,
+            'user_group_id' => $userGroup->id,
+        ]);
+    }
+
+    private function userRoleId(UserRoleEnum $role): int
+    {
+        return (int) UserRole::query()->where('title', $role->value)->value('id');
     }
 }

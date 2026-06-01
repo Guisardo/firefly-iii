@@ -42,6 +42,7 @@ use FireflyIII\Models\Transaction;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
+use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Services\Internal\Destroy\TransactionGroupDestroyService;
 use FireflyIII\Support\Facades\Amount;
@@ -237,13 +238,13 @@ trait AccountServiceTrait
         // get or grab currency:
         $currency   = $this->accountRepository->getAccountCurrency($account);
         if (null === $currency) {
-            $currency = Amount::getPrimaryCurrencyByUserGroup($account->user->userGroup);
+            $currency = Amount::getPrimaryCurrencyByUserGroup($this->groupForAccount($account));
         }
         // submit to factory:
         $submission = [
             'group_title'  => null,
             'user'         => $account->user,
-            'user_group'   => $account->user->userGroup,
+            'user_group'   => $this->groupForAccount($account),
             'transactions' => [[
                 'type'             => 'Liability credit',
                 'date'             => $openingBalanceDate,
@@ -252,7 +253,7 @@ trait AccountServiceTrait
                 'destination_id'   => $destId,
                 'destination_name' => $destName,
                 'user'             => $account->user,
-                'user_group'       => $account->user->userGroup,
+                'user_group'       => $this->groupForAccount($account),
                 'currency_id'      => $currency->id,
                 'order'            => 0,
                 'amount'           => $amount,
@@ -274,6 +275,7 @@ trait AccountServiceTrait
         /** @var TransactionGroupFactory $factory */
         $factory    = app(TransactionGroupFactory::class);
         $factory->setUser($account->user);
+        $factory->setUserGroup($this->groupForAccount($account));
 
         try {
             $group = $factory->create($submission);
@@ -331,14 +333,14 @@ trait AccountServiceTrait
         // get or grab currency:
         $currency   = $this->accountRepository->getAccountCurrency($account);
         if (null === $currency) {
-            $currency = Amount::getPrimaryCurrencyByUserGroup($account->user->userGroup);
+            $currency = Amount::getPrimaryCurrencyByUserGroup($this->groupForAccount($account));
         }
 
         // submit to factory:
         $submission = [
             'group_title'  => null,
             'user'         => $account->user,
-            'user_group'   => $account->user->userGroup,
+            'user_group'   => $this->groupForAccount($account),
             'transactions' => [[
                 'type'             => 'Opening balance',
                 'date'             => $data['opening_balance_date'],
@@ -347,7 +349,7 @@ trait AccountServiceTrait
                 'destination_id'   => $destId,
                 'destination_name' => $destName,
                 'user'             => $account->user,
-                'user_group'       => $account->user->userGroup,
+                'user_group'       => $this->groupForAccount($account),
                 'currency_id'      => $currency->id,
                 'order'            => 0,
                 'amount'           => $amount,
@@ -369,6 +371,7 @@ trait AccountServiceTrait
         /** @var TransactionGroupFactory $factory */
         $factory    = app(TransactionGroupFactory::class);
         $factory->setUser($account->user);
+        $factory->setUserGroup($this->groupForAccount($account));
 
         try {
             $group = $factory->create($submission);
@@ -423,14 +426,14 @@ trait AccountServiceTrait
         // get or grab currency:
         $currency               = $this->accountRepository->getAccountCurrency($account);
         if (null === $currency) {
-            $currency = Amount::getPrimaryCurrencyByUserGroup($account->user->userGroup);
+            $currency = Amount::getPrimaryCurrencyByUserGroup($this->groupForAccount($account));
         }
 
         // submit to factory:
         $submission             = [
             'group_title'  => null,
             'user'         => $account->user,
-            'user_group'   => $account->user->userGroup,
+            'user_group'   => $this->groupForAccount($account),
             'transactions' => [[
                 'type'             => 'Opening balance',
                 'date'             => $openingBalanceDate,
@@ -439,7 +442,7 @@ trait AccountServiceTrait
                 'destination_id'   => $destId,
                 'destination_name' => $destName,
                 'user'             => $account->user,
-                'user_group'       => $account->user->userGroup,
+                'user_group'       => $this->groupForAccount($account),
                 'currency_id'      => $currency->id,
                 'order'            => 0,
                 'amount'           => $amount,
@@ -461,6 +464,7 @@ trait AccountServiceTrait
         /** @var TransactionGroupFactory $factory */
         $factory                = app(TransactionGroupFactory::class);
         $factory->setUser($account->user);
+        $factory->setUserGroup($this->groupForAccount($account));
 
         try {
             $group = $factory->create($submission);
@@ -537,7 +541,7 @@ trait AccountServiceTrait
 
         if (null === $currency) {
             // use default currency:
-            $currency = Amount::getPrimaryCurrencyByUserGroup($this->user->userGroup);
+            $currency = Amount::getPrimaryCurrencyByUserGroup($this->groupForAccountUser());
         }
         $currency->enabled = true;
         $currency->save();
@@ -551,6 +555,24 @@ trait AccountServiceTrait
     protected function getOBGroup(Account $account): ?TransactionGroup
     {
         return $this->accountRepository->getOpeningBalanceGroup($account);
+    }
+
+    private function groupForAccount(Account $account): UserGroup
+    {
+        /** @var UserGroup $userGroup */
+        $userGroup = $account->userGroup ?? $account->user->userGroup;
+
+        return $userGroup;
+    }
+
+    private function groupForAccountUser(): UserGroup
+    {
+        /** @var UserGroup $userGroup */
+        $userGroup = property_exists($this, 'userGroup') && $this->userGroup instanceof UserGroup
+            ? $this->userGroup
+            : $this->user->userGroup;
+
+        return $userGroup;
     }
 
     /**
@@ -585,7 +607,7 @@ trait AccountServiceTrait
         // if exists, update:
         $currency                                    = $this->accountRepository->getAccountCurrency($account);
         if (null === $currency) {
-            $currency = Amount::getPrimaryCurrencyByUserGroup($account->user->userGroup);
+            $currency = Amount::getPrimaryCurrencyByUserGroup($this->groupForAccount($account));
         }
 
         // simply grab the first journal and change it:
@@ -630,7 +652,7 @@ trait AccountServiceTrait
         // if exists, update:
         $currency               = $this->accountRepository->getAccountCurrency($account);
         if (null === $currency) {
-            $currency = Amount::getPrimaryCurrencyByUserGroup($account->user->userGroup);
+            $currency = Amount::getPrimaryCurrencyByUserGroup($this->groupForAccount($account));
         }
 
         // simply grab the first journal and change it:

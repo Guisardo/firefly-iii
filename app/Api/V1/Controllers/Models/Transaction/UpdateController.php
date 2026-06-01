@@ -26,6 +26,7 @@ namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\Transaction\UpdateRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Events\Model\TransactionGroup\TransactionGroupEventFlags;
 use FireflyIII\Events\Model\TransactionGroup\TransactionGroupEventObjects;
 use FireflyIII\Events\Model\TransactionGroup\UpdatedSingleTransactionGroup;
@@ -48,7 +49,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 final class UpdateController extends Controller
 {
     private TransactionGroupRepositoryInterface $groupRepository;
-    protected array $acceptedRoles = [];
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
 
     /**
      * TransactionController constructor.
@@ -59,9 +60,11 @@ final class UpdateController extends Controller
         $this->middleware(function ($request, $next) {
             /** @var User $admin */
             $admin                 = auth()->user();
+            $userGroup             = $this->validateUserGroup($request);
 
             $this->groupRepository = app(TransactionGroupRepositoryInterface::class);
             $this->groupRepository->setUser($admin);
+            $this->groupRepository->setUserGroup($userGroup);
 
             return $next($request);
         });
@@ -75,7 +78,12 @@ final class UpdateController extends Controller
      */
     public function update(UpdateRequest $request, TransactionGroup $transactionGroup): JsonResponse
     {
+        if ($transactionGroup->user_group_id !== $this->userGroup->id) {
+            throw new NotFoundHttpException();
+        }
+
         $data                     = $request->getAll();
+        $data['user_group']       = $this->userGroup;
         Log::debug('Now in update routine for transaction group', $data);
         $oldHash                  = $this->groupRepository->getCompareHash($transactionGroup);
         $objects                  = TransactionGroupEventObjects::collectFromTransactionGroup($transactionGroup);
@@ -105,6 +113,7 @@ final class UpdateController extends Controller
         $collector                = app(GroupCollectorInterface::class);
         $collector
             ->setUser($admin)
+            ->setUserGroup($this->userGroup)
             // filter on transaction group.
             ->setTransactionGroup($transactionGroup)
             // all info needed for the API:
@@ -119,6 +128,7 @@ final class UpdateController extends Controller
         // enrich
         $enrichment               = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $selectedGroup            = $enrichment->enrichSingle($selectedGroup);
 
         /** @var TransactionGroupTransformer $transformer */

@@ -25,13 +25,14 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\UserGroup;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Models\UserGroup\UpdateRequest;
 use FireflyIII\Api\V1\Requests\Models\UserGroup\UpdateMembershipRequest;
+use FireflyIII\Api\V1\Requests\Models\UserGroup\UpdateRequest;
 use FireflyIII\Api\V1\Requests\Models\UserGroup\UseRequest;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Transformers\UserGroupTransformer;
+use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 
@@ -48,8 +49,10 @@ final class UpdateController extends Controller
     {
         parent::__construct();
         $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user             = auth()->user();
             $this->repository = app(UserGroupRepositoryInterface::class);
-            $this->repository->setUser(auth()->user());
+            $this->repository->setUser($user);
 
             return $next($request);
         });
@@ -73,15 +76,21 @@ final class UpdateController extends Controller
     {
         Log::debug(sprintf('Now in %s', __METHOD__));
         $this->repository->useUserGroup($userGroup);
+        Preferences::mark();
 
-        return response()->json([], 204);
+        $transformer = new UserGroupTransformer();
+        $transformer->setParameters($this->parameters);
+
+        return response()->api($this->jsonApiObject(self::RESOURCE_KEY, $userGroup, $transformer))->header('Content-Type', self::CONTENT_TYPE);
     }
 
     public function updateMembership(UpdateMembershipRequest $request, UserGroup $userGroup): JsonResponse
     {
         Log::debug(sprintf('Now in %s', __METHOD__));
-        $userGroup = $this->repository->updateMembership($userGroup, $request->getData());
+        $data      = $request->getData();
+        $userGroup = $this->repository->updateMembership($userGroup, $data);
         $userGroup->refresh();
+        Preferences::mark();
 
         $transformer = new UserGroupTransformer();
         $transformer->setParameters($this->parameters);

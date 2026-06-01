@@ -27,6 +27,7 @@ namespace FireflyIII\Rules;
 use Closure;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Models\Account;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use FireflyIII\Support\Facades\Steam;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Support\Facades\Log;
@@ -129,9 +130,11 @@ class UniqueIban implements ValidationRule
         if ('liabilities' === $type) {
             $typesArray = [AccountTypeEnum::LOAN->value, AccountTypeEnum::DEBT->value, AccountTypeEnum::MORTGAGE->value];
         }
-        $query      = auth()
-            ->user()
-            ->accounts()
+        $query      = ResolvesUserGroupParameter::hasExplicitUserGroup(request())
+            ? auth()->user()->groupMemberships()->where('user_group_id', ResolvesUserGroupParameter::resolve(request()))->firstOrFail()->userGroup->accounts()
+            : auth()->user()->accounts()
+        ;
+        $query
             ->leftJoin('account_types', 'account_types.id', '=', 'accounts.account_type_id')
             ->where('accounts.iban', $iban)
             ->whereIn('account_types.type', $typesArray)

@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /*
- * UseRequest.php
+ * SharedAdministrationAccessDenied.php
  * Copyright (c) 2026 james@firefly-iii.org
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
@@ -20,27 +22,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-declare(strict_types=1);
+namespace FireflyIII\Events\Model\UserGroup;
 
-namespace FireflyIII\Api\V1\Requests\Models\UserGroup;
+use FireflyIII\Events\Event;
+use FireflyIII\User;
+use Illuminate\Queue\SerializesModels;
 
-use FireflyIII\Api\V1\Requests\Models\UserGroup\Concerns\AuthorizesUserGroupRequests;
-use FireflyIII\Enums\UserRoleEnum;
-use Illuminate\Foundation\Http\FormRequest;
-
-class UseRequest extends FormRequest
+class SharedAdministrationAccessDenied extends Event
 {
-    use AuthorizesUserGroupRequests;
+    use SerializesModels;
 
-    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY, UserRoleEnum::MANAGE_TRANSACTIONS];
-
-    public function authorize(): bool
-    {
-        return $this->authorizeRouteUserGroup($this->acceptedRoles);
-    }
-
-    public function rules(): array
-    {
-        return [];
-    }
+    public function __construct(
+        public User $user,
+        public int $requestedUserGroupId,
+        public int $defaultUserGroupId,
+        public string $handler,
+        public string $reason,
+        public array $acceptedRoles
+    ) {}
 }

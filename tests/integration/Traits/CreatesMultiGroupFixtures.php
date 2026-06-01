@@ -73,12 +73,17 @@ trait CreatesMultiGroupFixtures
         ];
     }
 
-    protected function createAccountInGroup(User $user, UserGroup $userGroup, AccountTypeEnum $type = AccountTypeEnum::ASSET): Account
+    protected function createAccountInGroup(User $user, UserGroup $userGroup, AccountTypeEnum $type = AccountTypeEnum::ASSET, ?string $name = null): Account
     {
+        $data = ['user_group_id' => $userGroup->id];
+        if (null !== $name) {
+            $data['name'] = $name;
+        }
+
         return Account::factory()
             ->for($user)
             ->withType($type)
-            ->create(['user_group_id' => $userGroup->id])
+            ->create($data)
         ;
     }
 
@@ -155,6 +160,6 @@ trait CreatesMultiGroupFixtures
 
     private function createUserGroup(string $title): UserGroup
     {
-        return UserGroup::create(['title' => $title]);
+        return UserGroup::create(['title' => sprintf('%s %s', $title, substr(sha1($title.microtime(true).random_int(1, PHP_INT_MAX)), 0, 8))]);
     }
 }

@@ -146,6 +146,13 @@ class JournalUpdateService
         $this->tagFactory->setUser($transactionGroup->user);
         $this->accountRepository->setUser($transactionGroup->user);
         $this->transactionGroupRepository->setUser($transactionGroup->user);
+        $this->billRepository->setUserGroup($transactionGroup->userGroup);
+        $this->categoryRepository->setUserGroup($transactionGroup->userGroup);
+        $this->budgetRepository->setUserGroup($transactionGroup->userGroup);
+        $this->tagFactory->setUserGroup($transactionGroup->userGroup);
+        $this->accountRepository->setUserGroup($transactionGroup->userGroup);
+        $this->transactionGroupRepository->setUserGroup($transactionGroup->userGroup);
+        $this->currencyRepository->setUserGroup($transactionGroup->userGroup);
         $this->destinationAccount     = null;
         $this->destinationTransaction = null;
         $this->sourceAccount          = null;
@@ -365,6 +372,7 @@ class JournalUpdateService
         $validator         = app(AccountValidator::class);
         $validator->setTransactionType($expectedType);
         $validator->setUser($this->transactionJournal->user);
+        $validator->setUserGroup($this->transactionGroup->userGroup);
         $validator->source = $this->getValidSourceAccount();
         $result            = $validator->validateDestination(['id' => $destId, 'name' => $destName]);
         Log::debug(sprintf('hasValidDestinationAccount(%d, "%s") will return %s', $destId, $destName, var_export($result, true)));
@@ -396,6 +404,7 @@ class JournalUpdateService
         $validator    = app(AccountValidator::class);
         $validator->setTransactionType($expectedType);
         $validator->setUser($this->transactionJournal->user);
+        $validator->setUserGroup($this->transactionGroup->userGroup);
 
         $result       = $validator->validateSource(['id' => $sourceId, 'name' => $sourceName]);
         Log::debug(sprintf('hasValidSourceAccount(%d, "%s") will return %s', $sourceId, $sourceName, var_export($result, true)));

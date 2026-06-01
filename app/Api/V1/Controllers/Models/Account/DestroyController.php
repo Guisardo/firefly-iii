@@ -25,10 +25,13 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\Account;
 
 use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Class DestroyController
@@ -37,6 +40,7 @@ final class DestroyController extends Controller
 {
     public const string RESOURCE_KEY = 'accounts';
 
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
     private AccountRepositoryInterface $repository;
 
     /**
@@ -45,9 +49,13 @@ final class DestroyController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(function ($request, $next) {
+        $this->middleware(function (Request $request, $next) {
+            $userGroup        = $this->validateUserGroup($request);
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
+            if (ResolvesUserGroupParameter::hasExplicitUserGroup($request)) {
+                $this->repository->setUserGroup($userGroup);
+            }
 
             return $next($request);
         });

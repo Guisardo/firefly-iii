@@ -1,7 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 /*
- * UseRequest.php
+ * LogsSharedAdministrationDenial.php
  * Copyright (c) 2026 james@firefly-iii.org
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
@@ -20,27 +22,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-declare(strict_types=1);
+namespace FireflyIII\Listeners\Model\UserGroup;
 
-namespace FireflyIII\Api\V1\Requests\Models\UserGroup;
+use FireflyIII\Events\Model\UserGroup\SharedAdministrationAccessDenied;
+use Illuminate\Support\Facades\Log;
 
-use FireflyIII\Api\V1\Requests\Models\UserGroup\Concerns\AuthorizesUserGroupRequests;
-use FireflyIII\Enums\UserRoleEnum;
-use Illuminate\Foundation\Http\FormRequest;
-
-class UseRequest extends FormRequest
+class LogsSharedAdministrationDenial
 {
-    use AuthorizesUserGroupRequests;
-
-    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY, UserRoleEnum::MANAGE_TRANSACTIONS];
-
-    public function authorize(): bool
+    public function handle(SharedAdministrationAccessDenied $event): void
     {
-        return $this->authorizeRouteUserGroup($this->acceptedRoles);
-    }
-
-    public function rules(): array
-    {
-        return [];
+        Log::channel('audit')->warning('Shared administration group access denied.', [
+            'user_id'                 => $event->user->id,
+            'requested_user_group_id' => $event->requestedUserGroupId,
+            'default_user_group_id'   => $event->defaultUserGroupId,
+            'handler'                 => $event->handler,
+            'reason'                  => $event->reason,
+            'accepted_roles'          => $event->acceptedRoles,
+        ]);
     }
 }

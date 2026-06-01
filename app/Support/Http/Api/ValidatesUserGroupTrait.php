@@ -25,6 +25,8 @@ declare(strict_types=1);
 namespace FireflyIII\Support\Http\Api;
 
 use FireflyIII\Enums\UserRoleEnum;
+use FireflyIII\Events\Model\UserGroup\SharedAdministrationAccessDenied;
+use FireflyIII\Events\Model\UserGroup\SharedAdministrationGroupSelected;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
 use FireflyIII\User;
@@ -60,13 +62,12 @@ trait ValidatesUserGroupTrait
 
         /** @var User $user */
         $user        = auth()->user();
-        $groupId     = 0;
-        if (!$request->has('user_group_id')) {
-            $groupId = (int) $user->user_group_id;
+        $groupId     = ResolvesUserGroupParameter::resolve($request, (int) $user->user_group_id);
+        $explicit    = ResolvesUserGroupParameter::hasExplicitUserGroup($request);
+        if (!$explicit) {
             Log::debug(sprintf('validateUserGroup: no user group submitted, use default group #%d.', $groupId));
         }
-        if ($request->has('user_group_id')) {
-            $groupId = (int) $request->get('user_group_id');
+        if ($explicit) {
             Log::debug(sprintf('validateUserGroup: user group submitted, search for memberships in group #%d.', $groupId));
         }
 
@@ -77,6 +78,7 @@ trait ValidatesUserGroupTrait
 
         if (0 === $memberships->count()) {
             Log::debug(sprintf('validateUserGroup: user has no access to group #%d.', $groupId));
+            $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'missing_membership');
 
             throw new AuthorizationException((string) trans('validation.no_access_group'));
         }
@@ -85,12 +87,14 @@ trait ValidatesUserGroupTrait
         $group       = $repository->getById($groupId);
         if (null === $group) {
             Log::debug(sprintf('validateUserGroup: group #%d does not exist.', $groupId));
+            $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'missing_group');
 
             throw new AuthorizationException((string) trans('validation.belongs_user_or_user_group'));
         }
         Log::debug(sprintf('validateUserGroup: validate access of user to group #%d ("%s").', $groupId, $group->title));
         if (0 === count($this->acceptedRoles)) {
             Log::debug('validateUserGroup: no roles defined, so no access.');
+            $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'no_accepted_roles');
 
             throw new AuthorizationException((string) trans('validation.no_accepted_roles_defined'));
         }
@@ -102,6 +106,7 @@ trait ValidatesUserGroupTrait
                 Log::debug(sprintf('validateUserGroup: User has role "%s" in group #%d, return the group.', $role->value, $groupId));
                 $this->userGroup = $group;
                 $this->user      = $user;
+                $this->auditExplicitGroupSelection($explicit, $user, $group);
 
                 return $group;
             }
@@ -109,7 +114,31 @@ trait ValidatesUserGroupTrait
         }
 
         Log::debug('validateUserGroup: User does NOT have enough rights to access endpoint.');
+        $this->auditExplicitGroupDenial($explicit, $user, $groupId, 'insufficient_role');
 
         throw new AuthorizationException((string) trans('validation.belongs_user_or_user_group'));
+    }
+
+    private function auditExplicitGroupDenial(bool $explicit, User $user, int $groupId, string $reason): void
+    {
+        if (!$explicit) {
+            return;
+        }
+
+        event(new SharedAdministrationAccessDenied($user, $groupId, (int) $user->user_group_id, static::class, $reason, $this->acceptedRoleValues()));
+    }
+
+    private function auditExplicitGroupSelection(bool $explicit, User $user, UserGroup $group): void
+    {
+        if (!$explicit) {
+            return;
+        }
+
+        event(new SharedAdministrationGroupSelected($user, $group, (int) $user->user_group_id, static::class, $this->acceptedRoleValues()));
+    }
+
+    private function acceptedRoleValues(): array
+    {
+        return array_map(static fn (UserRoleEnum $role): string => $role->value, $this->acceptedRoles);
     }
 }

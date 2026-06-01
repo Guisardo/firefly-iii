@@ -107,7 +107,7 @@ class RouteRoleResolver
     private function userGroupRoles(Request $request, string $routeName): array
     {
         if (str_ends_with($routeName, '.use')) {
-            return [UserRoleEnum::READ_ONLY];
+            return [UserRoleEnum::READ_ONLY, UserRoleEnum::MANAGE_TRANSACTIONS];
         }
         if (str_ends_with($routeName, '.delete') || str_ends_with($routeName, '.destroy')) {
             return [UserRoleEnum::OWNER];

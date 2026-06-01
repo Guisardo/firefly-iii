@@ -38,8 +38,10 @@ use FireflyIII\Repositories\Budget\BudgetRepositoryInterface;
 use FireflyIII\Repositories\PiggyBank\PiggyBankRepositoryInterface;
 use FireflyIII\Services\Password\Verifier;
 use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use FireflyIII\Support\ParseDateString;
 use FireflyIII\User;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Validator;
@@ -850,14 +852,14 @@ class FireflyValidator extends Validator
         $type            = $existingAccount->accountType;
         $ignore          = $existingAccount->id;
 
-        $entry           = auth()->user()->accounts()->where('account_type_id', $type->id)->where('id', '!=', $ignore)->where('name', $value)->first();
+        $entry           = $this->accountScope()->where('account_type_id', $type->id)->where('id', '!=', $ignore)->where('name', $value)->first();
 
         return null === $entry;
     }
 
     private function validateByAccountName(string $value): bool
     {
-        return 0 === auth()->user()->accounts()->where('name', $value)->count();
+        return 0 === $this->accountScope()->where('name', $value)->count();
     }
 
     /**
@@ -870,7 +872,7 @@ class FireflyValidator extends Validator
         $ignore = (int) ($parameters[0] ?? 0.0);
 
         /** @var null|Account $result */
-        $result = auth()->user()->accounts()->where('account_type_id', $type->id)->where('id', '!=', $ignore)->where('name', $value)->first();
+        $result = $this->accountScope()->where('account_type_id', $type->id)->where('id', '!=', $ignore)->where('name', $value)->first();
 
         return null === $result;
     }
@@ -889,7 +891,7 @@ class FireflyValidator extends Validator
         $accountTypeIds = $accountTypes->pluck('id')->toArray();
 
         /** @var null|Account $result */
-        $result         = auth()->user()->accounts()->whereIn('account_type_id', $accountTypeIds)->where('id', '!=', $ignore)->where('name', $value)->first();
+        $result         = $this->accountScope()->whereIn('account_type_id', $accountTypeIds)->where('id', '!=', $ignore)->where('name', $value)->first();
 
         return null === $result;
     }
@@ -905,8 +907,17 @@ class FireflyValidator extends Validator
         $type            = $existingAccount->accountType;
         $ignore          = $existingAccount->id;
 
-        $entry           = auth()->user()->accounts()->where('account_type_id', $type->id)->where('id', '!=', $ignore)->where('name', $value)->first();
+        $entry           = $this->accountScope()->where('account_type_id', $type->id)->where('id', '!=', $ignore)->where('name', $value)->first();
 
         return null === $entry;
+    }
+
+    private function accountScope(): HasMany
+    {
+        if (ResolvesUserGroupParameter::hasExplicitUserGroup(request())) {
+            return auth()->user()->groupMemberships()->where('user_group_id', ResolvesUserGroupParameter::resolve(request()))->firstOrFail()->userGroup->accounts();
+        }
+
+        return auth()->user()->accounts();
     }
 }

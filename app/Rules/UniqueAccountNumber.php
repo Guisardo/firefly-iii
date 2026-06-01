@@ -28,6 +28,7 @@ use Closure;
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\AccountMeta;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Support\Facades\Log;
 
@@ -110,11 +111,16 @@ class UniqueAccountNumber implements ValidationRule
     {
         $query = AccountMeta::leftJoin('accounts', 'accounts.id', '=', 'account_meta.account_id')
             ->leftJoin('account_types', 'account_types.id', '=', 'accounts.account_type_id')
-            ->where('accounts.user_id', auth()->user()->id)
             ->where('account_types.type', $type)
             ->where('account_meta.name', '=', 'account_number')
             ->where('account_meta.data', json_encode($accountNumber))
         ;
+        if (ResolvesUserGroupParameter::hasExplicitUserGroup(request())) {
+            $query->where('accounts.user_group_id', ResolvesUserGroupParameter::resolve(request()));
+        }
+        if (!ResolvesUserGroupParameter::hasExplicitUserGroup(request())) {
+            $query->where('accounts.user_id', auth()->user()->id);
+        }
 
         if ($this->account instanceof Account) {
             $query->where('accounts.id', '!=', $this->account->id);
