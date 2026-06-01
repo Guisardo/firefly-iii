@@ -3,7 +3,8 @@
 Use this playbook before promoting a shared-administration image to `firefly-gcp`
 production and again when rolling back. The production VM stores SQLite on the
 persistent data disk at `/mnt/firefly-data/database.db` and manages the
-container through `firefly.service`.
+container through `firefly.service`. The matching `firefly-gcp` deployment docs
+must be updated in the coordinated deploy repository when this playbook changes.
 
 ## Required release record
 
@@ -14,15 +15,14 @@ Record these values before the cutover starts:
 | Production VM | `firefly-vm` in `us-central1-a` |
 | GCP project | `promising-rock-434012-u6` |
 | Database path | `/mnt/firefly-data/database.db` |
-| Previous full image digest | `guisardo/firefly-iii@sha256:<previous-digest>` |
-| New immutable image tag | `guisardo/firefly-iii:shared-admin-<git-sha>` |
-| New full image digest | `guisardo/firefly-iii@sha256:<new-digest>` |
+| Previous pinned image ref | `guisardo/firefly-iii@sha256:<previous-digest>` |
+| New pinned image ref | `guisardo/firefly-iii@sha256:<new-digest>` or `guisardo/firefly-iii:shared-admin-<git-sha>` |
 | Backup path | `/mnt/firefly-data/backups/database-<timestamp>.db` |
 | Backup sha256 | `<sha256sum>` |
 
-The rollback target must be the previous full image digest, not a moving tag.
-Keep the previous immutable tag as secondary context, but restart production from
-`guisardo/firefly-iii@sha256:<previous-digest>`.
+The rollback target must be the previous pinned image ref, not a moving tag.
+Prefer the previous full digest. Keep the previous immutable tag as secondary
+context, but restart production from the exact previous ref recorded above.
 
 ## Image parity
 
@@ -75,13 +75,46 @@ gcloud compute ssh firefly-vm \
 The `PRAGMA integrity_check;` output must be exactly `ok`. Do not continue if
 the backup is missing, has an unexpected owner or mode, or fails integrity.
 
-Restart production only after recording the backup path and checksum:
+Keep `firefly.service` stopped after the backup is verified. Do not restart the
+old image between the backup and pinned-image cutover.
+
+## Pinned-image cutover
+
+Write the new pinned image ref, recreate the container, and start production
+only after recording the backup path and checksum:
 
 ```bash
 gcloud compute ssh firefly-vm \
   --zone=us-central1-a \
   --project=promising-rock-434012-u6 \
-  --command="sudo systemctl start firefly.service"
+  --command="set -euo pipefail
+    new_image='guisardo/firefly-iii@sha256:<new-digest>'
+    echo \"\$new_image\" | sudo tee /etc/firefly/image >/dev/null
+    sudo docker pull \"\$new_image\"
+    sudo docker rm -f firefly >/dev/null 2>&1 || true
+    sudo systemctl reset-failed firefly.service || true
+    sudo systemctl start firefly.service
+    sudo systemctl status --no-pager firefly.service
+    sudo docker inspect firefly --format '{{.Config.Image}} {{.Image}} {{.State.Running}}'"
+```
+
+Abort before or during cutover by explicitly restarting the previous recorded
+image. Write the previous pinned image ref to `/etc/firefly/image` before
+starting systemd:
+
+```bash
+gcloud compute ssh firefly-vm \
+  --zone=us-central1-a \
+  --project=promising-rock-434012-u6 \
+  --command="set -euo pipefail
+    previous_image='guisardo/firefly-iii@sha256:<previous-digest>'
+    echo \"\$previous_image\" | sudo tee /etc/firefly/image >/dev/null
+    sudo docker pull \"\$previous_image\"
+    sudo docker rm -f firefly >/dev/null 2>&1 || true
+    sudo systemctl reset-failed firefly.service || true
+    sudo systemctl start firefly.service
+    sudo systemctl status --no-pager firefly.service
+    sudo docker inspect firefly --format '{{.Config.Image}} {{.Image}} {{.State.Running}}'"
 ```
 
 ## Roll back image only
@@ -89,9 +122,7 @@ gcloud compute ssh firefly-vm \
 Use this path when the database is healthy and only the container image needs to
 return to the previous build.
 
-1. Update the `firefly-gcp` image reference to
-   `guisardo/firefly-iii@sha256:<previous-digest>` in the production start/update
-   path.
+1. Confirm the previous pinned image ref from the release record.
 2. Recreate the container through systemd:
 
 ```bash
@@ -99,12 +130,15 @@ gcloud compute ssh firefly-vm \
   --zone=us-central1-a \
   --project=promising-rock-434012-u6 \
   --command="set -euo pipefail
+    previous_image='guisardo/firefly-iii@sha256:<previous-digest>'
     sudo systemctl stop firefly.service
+    echo \"\$previous_image\" | sudo tee /etc/firefly/image >/dev/null
+    sudo docker pull \"\$previous_image\"
     sudo docker rm -f firefly >/dev/null 2>&1 || true
     sudo systemctl reset-failed firefly.service || true
     sudo systemctl start firefly.service
     sudo systemctl status --no-pager firefly.service
-    sudo docker inspect firefly --format '{{.Image}} {{.State.Running}}'
+    sudo docker inspect firefly --format '{{.Config.Image}} {{.Image}} {{.State.Running}}'
     sudo docker ps --filter name=firefly"
 ```
 
@@ -143,7 +177,7 @@ gcloud compute ssh firefly-vm \
 The restored database integrity check must return `ok`. If ownership or mode
 differs from the pre-cutover record, fix it before restart.
 
-Then roll production back to the previous full image digest and restart through
+Then roll production back to the previous pinned image ref and restart through
 systemd:
 
 ```bash
@@ -151,12 +185,14 @@ gcloud compute ssh firefly-vm \
   --zone=us-central1-a \
   --project=promising-rock-434012-u6 \
   --command="set -euo pipefail
-    sudo docker pull guisardo/firefly-iii@sha256:<previous-digest>
+    previous_image='guisardo/firefly-iii@sha256:<previous-digest>'
+    echo \"\$previous_image\" | sudo tee /etc/firefly/image >/dev/null
+    sudo docker pull \"\$previous_image\"
     sudo docker rm -f firefly >/dev/null 2>&1 || true
     sudo systemctl reset-failed firefly.service || true
     sudo systemctl start firefly.service
     sudo systemctl status --no-pager firefly.service
-    sudo docker inspect firefly --format '{{.Image}} {{.State.Running}}'"
+    sudo docker inspect firefly --format '{{.Config.Image}} {{.Image}} {{.State.Running}}'"
 ```
 
 After boot, verify the restored database and application:
@@ -179,7 +215,8 @@ curl -fsS -H "Authorization: Bearer <token>" \
 Close the rollback only after:
 
 - `firefly.service` is active.
-- The `firefly` container is running from the previous full image digest.
+- `/etc/firefly/image` contains the previous pinned image ref.
+- The `firefly` container is running from the previous pinned image ref.
 - `PRAGMA integrity_check;` returns `ok` against the restored database.
 - Ownership and mode match the pre-cutover record.
 - External `/health`, browser login, and `/api/v1/about` succeed.
@@ -207,4 +244,4 @@ is outside this workspace's writable root. Apply these changes there:
    production, or require `FIREFLY_IMAGE` to be supplied explicitly for the run.
 6. Update `README.md` or the deployment docs to state that production and
    local-import must use the same immutable `guisardo/firefly-iii` image tag or
-   digest, with production rollback pinned to the previous full digest.
+   digest, with production rollback pinned to the previous recorded image ref.

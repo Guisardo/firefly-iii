@@ -33,6 +33,7 @@ use FireflyIII\Models\UserGroup;
 use FireflyIII\Rules\BelongsUser;
 use FireflyIII\Rules\BelongsUserGroup;
 use FireflyIII\Support\Facades\Steam;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -195,11 +196,7 @@ trait ValidatesSelectedUserGroup
 
     protected function hasExplicitUserGroupId(): bool
     {
-        if ($this->query->has('user_group_id') || $this->request->has('user_group_id')) {
-            return true;
-        }
-
-        return $this->isJson() && $this->json()->has('user_group_id');
+        return ResolvesUserGroupParameter::hasExplicitUserGroup($this);
     }
 
     private function accountTypeIdsForValidation(?string $type, ?Account $account): array

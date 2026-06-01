@@ -20,7 +20,7 @@
 
 
 import Get from "../../../api/v1/model/budget/get.js";
-import {scopedParams} from "./add-autocomplete.js";
+import {scopedParams} from "../../shared/user-group-scope.js";
 
 export function loadBudgets() {
     let params = scopedParams({

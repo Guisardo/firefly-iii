@@ -33,6 +33,7 @@ import {setVariable} from "../../store/set-variable.js";
 import {getVariables} from "../../store/get-variables.js";
 import pageNavigation from "../../support/page-navigation.js";
 import {getVariable} from "../../store/get-variable.js";
+import {scopedParams, scopedUrl, selectedUserGroupId} from "../shared/user-group-scope.js";
 
 
 // set type from URL
@@ -56,7 +57,7 @@ if(sortingColumn[0] === '-') {
 }
 
 page = parseInt(params.page ?? 1);
-const userGroupId = parseInt(window.fireflyPageState?.userGroupId ?? window.userGroupId ?? params.user_group_id ?? 0);
+const userGroupId = selectedUserGroupId();
 
 showInternalsButton();
 showWizardButton();
@@ -218,15 +219,10 @@ let index = function () {
             let url = './accounts/' + type + '?column=' + this.pageOptions.sortingColumn + '&direction=' + this.pageOptions.sortDirection + '&page=';
             if (includePageNr) {
                 url = url + this.page;
-                if (userGroupId > 0) {
-                    url += '&user_group_id=' + userGroupId;
-                }
-                return url;
+                return scopedUrl(url, userGroupId);
             }
-            if (userGroupId > 0) {
-                return url + '&user_group_id=' + userGroupId;
-            }
-            return url;
+
+            return scopedUrl(url, userGroupId);
         },
 
         formatMoney(amount, currencyCode) {
@@ -379,7 +375,7 @@ let index = function () {
             const end = new Date(window.store.get('end'));
             const today = new Date();
 
-            let params = {
+            let params = scopedParams({
                 sort: sorting,
                 filter: filters,
                 active: active,
@@ -388,10 +384,7 @@ let index = function () {
                 page: this.page,
                 start: start,
                 end: end
-            };
-            if (userGroupId > 0) {
-                params.user_group_id = userGroupId;
-            }
+            }, userGroupId);
 
             if (!this.tableColumns.balance_difference.enabled) {
                 // delete params.startPeriod;

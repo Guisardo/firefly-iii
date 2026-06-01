@@ -41,6 +41,8 @@
 </template>
 
 <script>
+import {scopedUrl} from "../../support/user-group-scope";
+
 export default {
   name: "PiggyBank",
   props: ['value', 'transactionType', 'error', 'no_piggy_bank'],
@@ -61,7 +63,7 @@ export default {
     },
     loadPiggies: function () {
       let URI = document.getElementsByTagName('base')[0].href + "api/v1/autocomplete/piggy-banks-with-balance?limit=1337";
-      axios.get(URI, {}).then((res) => {
+      axios.get(scopedUrl(URI), {}).then((res) => {
         let tempList = {
           0: {
             group: {

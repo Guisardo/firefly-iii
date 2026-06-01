@@ -67,7 +67,7 @@ use FireflyIII\User;
 return [
     'bindables' => [
         // models
-        'account'                   => UserGroupAccount::class,
+        'account'                   => Account::class,
         'attachment'                => Attachment::class,
         'availableBudget'           => AvailableBudget::class,
         'bill'                      => Bill::class,

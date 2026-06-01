@@ -110,6 +110,19 @@ final class WebReadControllerTest extends TestCase
         });
     }
 
+    public function testAccountShowHonorsExplicitRequestedAdministration(): void
+    {
+        $owner   = $this->createUserInGroup($this->fixture['requested_group'], UserRoleEnum::OWNER);
+        $account = $this->createAccountInGroup($owner, $this->fixture['requested_group'], AccountTypeEnum::ASSET, 'Requested shared asset');
+
+        $response = $this->get(sprintf('%s?user_group_id=%d', route('accounts.show', ['account' => $account->id]), $this->fixture['requested_group']->id));
+
+        $response->assertOk();
+        $response->assertViewHas('account', static fn ($viewAccount): bool => $viewAccount->id === $account->id);
+        $response->assertSee(sprintf('/accounts/edit/%d?user_group_id=%d', $account->id, $this->fixture['requested_group']->id), false);
+        $response->assertSee(sprintf('/accounts/delete/%d?user_group_id=%d', $account->id, $this->fixture['requested_group']->id), false);
+    }
+
     public function testTransactionIndexHonorsExplicitRequestedAdministration(): void
     {
         $requestedGroup = $this->createWithdrawalInGroup($this->fixture['user'], $this->fixture['requested_group']);

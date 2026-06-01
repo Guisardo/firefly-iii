@@ -25,7 +25,6 @@ namespace FireflyIII\Support\Binder;
 
 use FireflyIII\Models\TransactionGroup;
 use Illuminate\Routing\Route;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Class UserGroupTransaction.
@@ -34,23 +33,6 @@ class UserGroupTransaction implements BinderInterface
 {
     public static function routeBinder(string $value, Route $route): TransactionGroup
     {
-        if (auth()->check()) {
-            $userGroup = ResolvesUserGroupForRouteBinding::resolvedUserGroup($route);
-            if (null !== $userGroup) {
-                $group = TransactionGroup::query()
-                    ->where('id', (int) $value)
-                    ->where('user_group_id', $userGroup->id)
-                    ->first()
-                ;
-                if (null !== $group) {
-                    return $group;
-                }
-            }
-            if (!ResolvesUserGroupForRouteBinding::hasExplicitUserGroup($route)) {
-                return TransactionGroup::routeBinder($value, $route);
-            }
-        }
-
-        throw new NotFoundHttpException();
+        return TransactionGroup::routeBinder($value, $route);
     }
 }

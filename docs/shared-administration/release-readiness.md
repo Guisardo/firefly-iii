@@ -9,7 +9,7 @@ Use this checklist before promoting shared-administration changes beyond develop
 | Backward compatibility | Existing single-user and single-group flows still work without requiring clients to send new group fields unless the API contract explicitly requires them. Account create/update/delete without `user_group_id` must pass the mandatory no-`user_group_id` compatibility gate in `docs/shared-administration/iteration-4-release-evidence.md`; this coverage is not risk-accepted by default. | Pending |
 | Regression leakage sweep | Search and test coverage confirm accounts, transactions, attachments, exports, autocomplete, rules, reconciliation, and bulk paths cannot leak data across groups. | Pending |
 | Docker smoke | Fresh Docker container boots, health check passes, login/API auth works, and account/transaction read/write smoke tests run against the packaged image. | Pending |
-| Docker image publication | GitHub Actions publishes `guisardo/firefly-iii:shared-admin-${GITHUB_SHA}` and, when approved, `guisardo/firefly-iii:shared-admin-latest`; release evidence records the pushed digest, image metadata, SBOM, scan output, signature verification, and provenance verification. | Pending |
+| Docker image publication | Manual GitHub Actions workflow `.github/workflows/docker-publish.yml` publishes `guisardo/firefly-iii:shared-admin-${GITHUB_SHA}` and, when approved, `guisardo/firefly-iii:shared-admin-latest`; release evidence records the pushed digest, image metadata, SBOM, scan output, signature verification, and provenance verification. | Pending |
 | Production image pin | Production and local-import deployments use the same immutable `shared-admin-${GITHUB_SHA}` tag or image digest. No production deployment uses `fireflyiii/core:latest` or unpinned `shared-admin-latest`. | Pending |
 | Migration/upgrade | Database migrations and upgrade commands run from the previous supported release with existing user/group/account/transaction data preserved. | Pending |
 | Security/role sign-off | Maintainer review confirms role mapping, read-only enforcement, inactive/blocked user denial, stale membership behavior, and no active-group mutation. | Pending |
@@ -17,44 +17,33 @@ Use this checklist before promoting shared-administration changes beyond develop
 | Observability | Denials, suspicious group mismatches, stale membership failures, and mutation attempts emit actionable logs or metrics without exposing sensitive financial data. | Pending |
 | Deployment verification evidence | Post-deploy checklist captures version, image/tag or commit, migration result, smoke-test output, representative API responses, and rollback readiness confirmation. | Pending |
 
-## Iteration 2 Docker Release Notes
+## Docker Validation and Publication
 
-The shared-administration image is built from this fork's PHP source and frontend assets by `.github/workflows/shared-access-pr.yml`. The workflow installs Composer dependencies from `composer.lock`, installs Node dependencies with `npm ci`, builds both asset workspaces, runs a SQLite container boot smoke, then publishes to Docker Hub only from gated non-PR events after validation succeeds.
+`.github/workflows/shared-access-pr.yml` validates the shared-administration
+candidate. It installs locked PHP and Node dependencies, builds both asset
+workspaces, and runs the SQLite container boot smoke. It does not publish Docker
+Hub images.
 
-Docker Hub repository: `guisardo/firefly-iii`.
+`.github/workflows/docker-publish.yml` is the manual publication workflow for
+Docker Hub repository `guisardo/firefly-iii`. It publishes the immutable
+`shared-admin-${GITHUB_SHA}` tag and, when approved, the moving
+`shared-admin-latest` tag.
 
-Published tags:
+Deployment consumers, including `firefly-gcp` and local import tooling, must pin
+the same immutable `shared-admin-${GITHUB_SHA}` tag or image digest. Do not
+deploy `fireflyiii/core:latest` or `shared-admin-latest` to production.
 
-| Tag | Purpose |
-| --- | --- |
-| `shared-admin-${GITHUB_SHA}` | Immutable release candidate and deployment pin. |
-| `shared-admin-latest` | Moving pointer for the most recent successful shared-administration build. |
-
-Deployment consumers, including `firefly-gcp` and local import tooling, must pin the same immutable `shared-admin-${GITHUB_SHA}` tag. Do not deploy `fireflyiii/core:latest` or `shared-admin-latest` to production.
-
-The Dockerfile pins external base images by digest, includes OCI image labels, and adds a container healthcheck against `/health`. The CI smoke starts the image with SQLite, creates Passport keys, runs migrations, waits for Docker health to become `healthy`, and verifies the health endpoint response.
-
-Before production cutover, record:
-
-| Item | Evidence |
-| --- | --- |
-| SQLite backup | Backup file path, timestamp, and checksum. |
-| Previous image | Exact previous immutable image tag or digest. |
-| New image | Exact `guisardo/firefly-iii:shared-admin-${GITHUB_SHA}` tag. |
-| Restore steps | Commands and operator for restoring SQLite and reverting the image tag. |
-| Health proof | Container health status, `/health` response, and external login/API smoke result. |
-
-Use `docs/shared-administration/firefly-gcp-sqlite-rollback-playbook.md` for the
-full `firefly-gcp` SQLite backup and rollback sequence. It covers stopped-service
-SQLite backups, `PRAGMA integrity_check`, ownership/mode checks, previous image
-digest rollback, systemd restart, restored database verification, and
-boot/login/API verification.
+Before production cutover, use
+`docs/shared-administration/firefly-gcp-sqlite-rollback-playbook.md` as the
+single in-repo source for the SQLite backup, stopped-service cutover, abort, and
+rollback sequence. Matching `firefly-gcp` docs must be updated in the
+coordinated deploy repository.
 
 ## Release Gate
 
 Do not release until every row is complete or has an explicit accepted risk signed off by the release owner and security reviewer. Accepted risks must include scope, user impact, mitigation, owner, and expiration date.
 
-## Docker Hub Image Release
+## Docker Hub Image Release Evidence
 
 The shared-administration fork publishes images to Docker Hub repository `guisardo/firefly-iii` with the manual workflow `.github/workflows/docker-publish.yml`.
 
@@ -78,4 +67,8 @@ Required release evidence:
 - `cosign-signature-verify.txt`, `cosign-sbom-verify.txt`, and `cosign-provenance-verify.txt` record signature, SBOM attestation, and provenance attestation verification when the vulnerability gate passes.
 - `trivy-license.txt` is retained as an advisory license scan. Treat license findings as release-owner review input because policy enforcement depends on the deployment and redistribution posture.
 
-Production cutover must record the previous image tag or digest, take a SQLite backup before replacing the container, deploy the pinned `shared-admin-${GITHUB_SHA}` tag or digest, verify container health and external login, and keep restore steps ready before marking the release complete.
+Production cutover must record the previous pinned image ref, take a SQLite
+backup before replacing the container, keep `firefly.service` stopped until the
+pinned-image cutover starts, deploy the pinned `shared-admin-${GITHUB_SHA}` tag
+or digest, verify container health and external login, and keep the rollback
+playbook ready before marking the release complete.

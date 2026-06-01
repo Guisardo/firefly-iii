@@ -223,12 +223,20 @@ Route::group(
         Route::post('store', ['uses' => 'Account\CreateController@store', 'as' => 'store']);
 
         // edit
-        Route::get('edit/{account}', ['uses' => 'Account\EditController@edit', 'as' => 'edit']);
-        Route::post('update/{account}', ['uses' => 'Account\EditController@update', 'as' => 'update']);
+        Route::get('edit/{account}', ['uses' => 'Account\EditController@edit', 'as' => 'edit'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
+        Route::post('update/{account}', ['uses' => 'Account\EditController@update', 'as' => 'update'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
 
         // delete
-        Route::get('delete/{account}', ['uses' => 'Account\DeleteController@delete', 'as' => 'delete']);
-        Route::post('destroy/{account}', ['uses' => 'Account\DeleteController@destroy', 'as' => 'destroy']);
+        Route::get('delete/{account}', ['uses' => 'Account\DeleteController@delete', 'as' => 'delete'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
+        Route::post('destroy/{account}', ['uses' => 'Account\DeleteController@destroy', 'as' => 'destroy'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
 
         // show
         Route::get('show/{account}/all', ['uses' => 'Account\ShowController@showAll', 'as' => 'show.all'])

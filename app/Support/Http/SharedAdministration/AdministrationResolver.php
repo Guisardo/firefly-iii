@@ -33,8 +33,6 @@ use FireflyIII\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
-use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class AdministrationResolver
@@ -126,11 +124,7 @@ class AdministrationResolver
             return [(int) $user->user_group_id, AdministrationContext::SOURCE_SELECTED_DEFAULT];
         }
 
-        try {
-            $parameterGroupId = ResolvesUserGroupParameter::resolveExplicit($request);
-        } catch (ConflictHttpException|ValidationException) {
-            throw $this->deny((string) trans('validation.belongs_user_or_user_group'));
-        }
+        $parameterGroupId = ResolvesUserGroupParameter::resolveExplicit($request);
 
         if (null !== $routeGroupId && null !== $parameterGroupId && $routeGroupId !== $parameterGroupId) {
             throw $this->deny((string) trans('validation.belongs_user_or_user_group'));

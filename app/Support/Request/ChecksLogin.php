@@ -26,6 +26,7 @@ namespace FireflyIII\Support\Request;
 
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\UserGroup;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\User;
 use Illuminate\Support\Facades\Log;
@@ -95,13 +96,14 @@ trait ChecksLogin
 
         /** @var null|UserGroup $userGroup */
         $userGroup = $this->route()?->parameter('userGroup');
+        if ($userGroup instanceof UserGroup && ResolvesUserGroupParameter::hasExplicitUserGroup($this) && $userGroup->id !== ResolvesUserGroupParameter::resolve($this)) {
+            Log::error(sprintf('Request class has route userGroup #%d, but request selected a different user_group_id.', $userGroup->id));
+
+            return null;
+        }
         if (null === $userGroup) {
             // Log::debug('Request class has no userGroup parameter, but perhaps there is a parameter.');
-            $userGroupId = (int) $this->get('user_group_id');
-            if (0 === $userGroupId) {
-                // Log::debug(sprintf('Request class has no user_group_id parameter, grab default from user (group #%d).', $user->user_group_id));
-                $userGroupId = (int) $user->user_group_id;
-            }
+            $userGroupId = ResolvesUserGroupParameter::resolve($this, (int) $user->user_group_id);
             $userGroup   = UserGroup::find($userGroupId);
             if (null === $userGroup) {
                 Log::error(sprintf('Request class has user_group_id (#%d), but group does not exist.', $userGroupId));

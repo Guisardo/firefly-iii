@@ -29,10 +29,13 @@ use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\UserGroup;
+use FireflyIII\Support\Binder\UserGroupAccount;
+use FireflyIII\Support\Binder\UserGroupTransaction;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\User;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
+use Illuminate\Validation\ValidationException;
 use Override;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\integration\TestCase;
@@ -48,6 +51,46 @@ use Tests\integration\Traits\CreatesMultiGroupFixtures;
 final class RouteBinderUserGroupTest extends TestCase
 {
     use CreatesMultiGroupFixtures;
+
+    public function testGlobalAccountBindingUsesAccountModelAndKeepsAdditiveUserGroupAccountBinding(): void
+    {
+        $this->assertSame(Account::class, config('bindables.bindables.account'));
+        $this->assertSame(UserGroupAccount::class, config('bindables.bindables.userGroupAccount'));
+    }
+
+    public function testAdditiveUserGroupAccountBinderDelegatesToAccountRouteBinder(): void
+    {
+        $fixture   = $this->createMultiGroupUserFixture();
+        $groupUser = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
+        $account   = $this->createAccountInGroup($groupUser, $fixture['requested_group'], AccountTypeEnum::ASSET);
+        $route     = new Route('GET', '/api/v1/user-groups/{userGroup}/accounts/{userGroupAccount}', []);
+        $route->bind(Request::create(sprintf('/api/v1/user-groups/%d/accounts/%d', $fixture['requested_group']->id, $account->id), 'GET'));
+        $route->setParameter('userGroup', $fixture['requested_group']);
+
+        $this->actingAs($fixture['user']);
+
+        $bound = UserGroupAccount::routeBinder((string) $account->id, $route);
+
+        $this->assertSame($account->id, $bound->id);
+        $this->assertSame($fixture['requested_group']->id, $bound->user_group_id);
+    }
+
+    public function testAdditiveUserGroupTransactionBinderDelegatesToTransactionGroupRouteBinder(): void
+    {
+        $fixture   = $this->createMultiGroupUserFixture();
+        $groupUser = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
+        $group     = $this->createWithdrawalInGroup($groupUser, $fixture['requested_group']);
+        $route     = new Route('GET', '/api/v1/user-groups/{userGroup}/transactions/{userGroupTransaction}', []);
+        $route->bind(Request::create(sprintf('/api/v1/user-groups/%d/transactions/%d', $fixture['requested_group']->id, $group->id), 'GET'));
+        $route->setParameter('userGroup', $fixture['requested_group']);
+
+        $this->actingAs($fixture['user']);
+
+        $bound = UserGroupTransaction::routeBinder((string) $group->id, $route);
+
+        $this->assertSame($group->id, $bound->id);
+        $this->assertSame($fixture['requested_group']->id, $bound->user_group_id);
+    }
 
     public function testAccountBinderUsesResolvedUserGroupForExplicitRequest(): void
     {
@@ -102,6 +145,19 @@ final class RouteBinderUserGroupTest extends TestCase
         app()->instance('request', Request::create('/api/v1/accounts/'.$account->id, 'GET', ['user_group_id' => $fixture['requested_group']->id]));
 
         $this->expectException(NotFoundHttpException::class);
+
+        Account::routeBinder((string) $account->id);
+    }
+
+    public function testAccountBinderPropagatesMalformedExplicitUserGroupId(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture();
+        $account = $this->createAccountInGroup($fixture['user'], $fixture['active_group'], AccountTypeEnum::ASSET);
+
+        $this->actingAs($fixture['user']);
+        app()->instance('request', Request::create('/api/v1/accounts/'.$account->id, 'GET', ['user_group_id' => 'abc']));
+
+        $this->expectException(ValidationException::class);
 
         Account::routeBinder((string) $account->id);
     }

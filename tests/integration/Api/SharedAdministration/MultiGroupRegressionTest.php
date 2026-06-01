@@ -115,7 +115,69 @@ final class MultiGroupRegressionTest extends TestCase
             'user_group_id' => 'not-a-number',
         ]));
 
-        $response->assertUnauthorized();
+        $response->assertUnprocessable();
+        $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
+    }
+
+    public function testConflictingQueryAndJsonGroupIdsReturnConflict(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        $user    = $fixture['user'];
+
+        Passport::actingAs($user);
+        $response = $this->postJson(route('api.v1.accounts.store', ['user_group_id' => $fixture['active_group']->id]), [
+            'user_group_id' => $fixture['requested_group']->id,
+            'name'          => 'Conflicting parser account',
+            'type'          => 'asset',
+            'account_role'  => 'defaultAsset',
+        ]);
+
+        $response->assertStatus(409);
+        $this->assertDatabaseMissing('accounts', [
+            'name' => 'Conflicting parser account',
+        ]);
+        $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
+    }
+
+    public function testSameQueryAndJsonGroupIdStoresInRequestedGroup(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        $user    = $fixture['user'];
+
+        Passport::actingAs($user);
+        $response = $this->postJson(route('api.v1.accounts.store', ['user_group_id' => $fixture['requested_group']->id]), [
+            'user_group_id' => $fixture['requested_group']->id,
+            'name'          => 'Matching parser account',
+            'type'          => 'asset',
+            'account_role'  => 'defaultAsset',
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('accounts', [
+            'name'          => 'Matching parser account',
+            'user_group_id' => $fixture['requested_group']->id,
+        ]);
+        $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
+    }
+
+    public function testJsonBodyGroupIdStoresInRequestedGroup(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        $user    = $fixture['user'];
+
+        Passport::actingAs($user);
+        $response = $this->postJson(route('api.v1.accounts.store'), [
+            'user_group_id' => $fixture['requested_group']->id,
+            'name'          => 'Json parser account',
+            'type'          => 'asset',
+            'account_role'  => 'defaultAsset',
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('accounts', [
+            'name'          => 'Json parser account',
+            'user_group_id' => $fixture['requested_group']->id,
+        ]);
         $this->assertSame($fixture['active_group']->id, $user->refresh()->user_group_id);
     }
 }

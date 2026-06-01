@@ -196,6 +196,7 @@ final class ShowController extends Controller
             'chartUrl'     => $chartUrl,
             'location'     => $location,
             'balances'     => $balances,
+            'userGroupId'  => $this->resolvedUserGroup()?->id,
         ]);
     }
 
@@ -274,6 +275,7 @@ final class ShowController extends Controller
             'start'        => $start,
             'end'          => $end,
             'balances'     => $balances,
+            'userGroupId'  => $this->resolvedUserGroup()?->id,
         ]);
     }
 }

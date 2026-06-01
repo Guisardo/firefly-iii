@@ -588,10 +588,15 @@ class FireflyValidator extends Validator
 
         $query     = AccountMeta::leftJoin('accounts', 'accounts.id', '=', 'account_meta.account_id')
             ->whereNull('accounts.deleted_at')
-            ->where('accounts.user_id', auth()->user()->id)
             ->where('account_meta.name', 'account_number')
             ->where('account_meta.data', json_encode($value))
         ;
+        if (ResolvesUserGroupParameter::hasExplicitUserGroup(request())) {
+            $query->where('accounts.user_group_id', ResolvesUserGroupParameter::resolve(request()));
+        }
+        if (!ResolvesUserGroupParameter::hasExplicitUserGroup(request())) {
+            $query->where('accounts.user_id', auth()->user()->id);
+        }
 
         if ($accountId > 0) {
             // exclude current account from check.

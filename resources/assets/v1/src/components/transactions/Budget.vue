@@ -49,6 +49,8 @@
 </template>
 
 <script>
+import {scopedUrl} from "../../support/user-group-scope";
+
 export default {
   name: "Budget",
   props: {
@@ -88,7 +90,7 @@ export default {
     },
     loadBudgets: function () {
       let URI = document.getElementsByTagName('base')[0].href + 'api/v1/autocomplete/budgets?limit=1337';
-      axios.get(URI, {}).then((res) => {
+      axios.get(scopedUrl(URI), {}).then((res) => {
         this.budgets = [
           {
             name: this.no_budget,

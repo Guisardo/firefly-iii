@@ -45,6 +45,13 @@ class RouteRoleResolver
         'chart.transactions.sourceAccounts',
     ];
 
+    private const array WEB_MANAGE_TRANSACTION_ROUTES = [
+        'accounts.edit',
+        'accounts.update',
+        'accounts.delete',
+        'accounts.destroy',
+    ];
+
     public function acceptedRolesFor(Request $request): array
     {
         $route = $request->route();
@@ -58,6 +65,9 @@ class RouteRoleResolver
         }
         if (in_array($routeName, self::WEB_READ_ROUTES, true)) {
             return [UserRoleEnum::READ_ONLY];
+        }
+        if (in_array($routeName, self::WEB_MANAGE_TRANSACTION_ROUTES, true)) {
+            return [UserRoleEnum::MANAGE_TRANSACTIONS];
         }
         if (str_starts_with($routeName, 'api.v1.accounts.')
             || str_starts_with($routeName, 'api.v1.transactions.')

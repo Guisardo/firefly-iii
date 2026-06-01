@@ -26,6 +26,7 @@ import formatMoney from "../../util/format-money.js";
 
 import '../../css/grid-ff3-theme.css';
 import Get from "../../api/v1/model/transaction/get.js";
+import {scopedParams} from "../shared/user-group-scope.js";
 
 let index = function () {
     return {
@@ -84,13 +85,8 @@ let index = function () {
             this.transactions = [];
             const urlParts = window.location.href.split('?')[0].split('/');
             const type = urlParts[urlParts.length - 1];
-            const queryParams = new URLSearchParams(window.location.search);
-            const userGroupId = parseInt(window.fireflyPageState?.userGroupId ?? window.userGroupId ?? queryParams.get('user_group_id') ?? 0);
             let getter = new Get();
-            let params = {page: page, type: type};
-            if (userGroupId > 0) {
-                params.user_group_id = userGroupId;
-            }
+            let params = scopedParams({page: page, type: type});
 
             getter.list(params).then(response => {
                 this.parseTransactions(response.data.data)

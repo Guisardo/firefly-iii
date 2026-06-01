@@ -30,7 +30,8 @@ import {loadPiggyBanks} from "./shared/load-piggy-banks.js";
 import {loadSubscriptions} from "./shared/load-subscriptions.js";
 
 import 'leaflet/dist/leaflet.css';
-import {addAutocomplete, getUrls, scopedParams} from "./shared/add-autocomplete.js";
+import {addAutocomplete, getUrls} from "./shared/add-autocomplete.js";
+import {scopedParams} from "../shared/user-group-scope.js";
 import {
     changeCategory,
     changeDescription,

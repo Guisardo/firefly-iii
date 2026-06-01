@@ -19,7 +19,7 @@
  */
 
 import Get from "../../../api/v1/model/piggy-bank/get.js";
-import {scopedParams} from "./add-autocomplete.js";
+import {scopedParams} from "../../shared/user-group-scope.js";
 
 export function loadPiggyBanks() {
     let params = scopedParams({

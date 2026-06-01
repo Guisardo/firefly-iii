@@ -170,7 +170,7 @@ final class SharedAdministrationWriteControllerTest extends TestCase
             'account_role'  => 'defaultAsset',
         ]);
 
-        $response->assertUnauthorized();
+        $response->assertStatus(409);
         $this->assertDatabaseMissing('accounts', [
             'name' => 'Conflicting JSON checking',
         ]);
@@ -188,7 +188,7 @@ final class SharedAdministrationWriteControllerTest extends TestCase
             'account_role'  => 'defaultAsset',
         ], ['Accept' => 'application/json']);
 
-        $response->assertUnauthorized();
+        $response->assertStatus(409);
         $this->assertDatabaseMissing('accounts', [
             'name' => 'Conflicting form checking',
         ]);

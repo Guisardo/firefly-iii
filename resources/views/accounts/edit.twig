@@ -5,19 +5,24 @@
 {% endblock %}
 
 {% block content %}
+    {% set userGroupId = userGroupId|default(0) %}
+    {% set userGroupQuery = userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
     <!-- set location data high up -->
     <script type="text/javascript" nonce="{{ JS_NONCE }}">
         var locations = {{ locations|json_encode|raw }};
         var mapboxToken = "{{ config('firefly.mapbox_api_key') }}";
     </script>
 
-    <form method="post" action="{{ route('accounts.update',account.id) }}" class="form-horizontal"
+    <form method="post" action="{{ route('accounts.update',account.id) }}{{ userGroupQuery }}" class="form-horizontal"
           accept-charset="UTF-8"
           enctype="multipart/form-data">
         <input type="hidden" name="_token" value="{{ csrf_token() }}"/>
 
         <input type="hidden" name="id" value="{{ account.id }}"/>
         <input type="hidden" name="objectType" value="{{ objectType }}"/>
+        {% if userGroupId %}
+            <input type="hidden" name="user_group_id" value="{{ userGroupId }}"/>
+        {% endif %}
 
         <div class="row">
             <div class="col-lg-6 col-md-6 col-sm-12 col-xs-12">

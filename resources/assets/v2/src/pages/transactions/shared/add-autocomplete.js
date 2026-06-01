@@ -19,27 +19,7 @@
  */
 
 import Autocomplete from "bootstrap5-autocomplete";
-
-export function selectedUserGroupId() {
-    const pageUserGroupId = parseInt(window.fireflyPageState?.userGroupId ?? window.userGroupId ?? 0);
-    if (pageUserGroupId > 0) {
-        return pageUserGroupId;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const userGroupId = parseInt(params.get('user_group_id') ?? 0);
-
-    return userGroupId > 0 ? userGroupId : 0;
-}
-
-export function scopedParams(params = {}) {
-    const userGroupId = selectedUserGroupId();
-    if (userGroupId > 0) {
-        params.user_group_id = userGroupId;
-    }
-
-    return params;
-}
+import {scopedParams} from "../../shared/user-group-scope.js";
 
 export function getUrls() {
     return {

@@ -68,6 +68,7 @@ final class WriteScopeControllerTest extends TestCase
             ->firstOrFail()
         ;
         $this->assertSame((string) $transactionGroup->id, $response->json('data.id'));
+        $this->assertSame('USD', $response->json('data.attributes.transactions.0.primary_currency_code'));
         $this->assertSame($this->fixture['requested_group']->id, $transactionGroup->user_group_id);
         $this->assertSame($this->fixture['requested_group']->id, $transactionGroup->transactionJournals()->firstOrFail()->user_group_id);
         $this->assertSame($this->fixture['active_group']->id, $this->user->refresh()->user_group_id);
@@ -130,6 +131,7 @@ final class WriteScopeControllerTest extends TestCase
             'user_group_id' => $this->fixture['requested_group']->id,
             'title'         => 'Updated requested transaction',
         ]);
+        $this->assertSame('USD', $response->json('data.attributes.transactions.0.primary_currency_code'));
         $this->assertSame($this->fixture['active_group']->id, $this->user->refresh()->user_group_id);
     }
 
@@ -149,6 +151,29 @@ final class WriteScopeControllerTest extends TestCase
             'user_group_id' => $this->fixture['active_group']->id,
             'title'         => 'Updated active transaction',
         ]);
+        $this->assertSame('EUR', $response->json('data.attributes.transactions.0.primary_currency_code'));
+    }
+
+    public function testStoreWithoutUserGroupIdReturnsActiveDefaultPrimaryCurrency(): void
+    {
+        $source      = $this->createAccountInGroup($this->user, $this->fixture['active_group'], AccountTypeEnum::ASSET);
+        $destination = $this->createAccountInGroup($this->user, $this->fixture['active_group'], AccountTypeEnum::EXPENSE);
+
+        Passport::actingAs($this->user);
+        $response = $this->postJson(route('api.v1.transactions.store'), $this->payload([
+            'source_id'     => $source->id,
+            'destination_id' => $destination->id,
+        ]));
+
+        $response->assertOk();
+        $transactionGroup = TransactionGroup::query()
+            ->where('user_id', $this->user->id)
+            ->where('user_group_id', $this->fixture['active_group']->id)
+            ->latest('id')
+            ->firstOrFail()
+        ;
+        $this->assertSame((string) $transactionGroup->id, $response->json('data.id'));
+        $this->assertSame('EUR', $response->json('data.attributes.transactions.0.primary_currency_code'));
     }
 
     public function testUpdateRouteAndRequestGroupMismatchFailsClosed(): void
@@ -276,6 +301,8 @@ final class WriteScopeControllerTest extends TestCase
         parent::setUp();
 
         $this->fixture = $this->createMultiGroupUserFixture(UserRoleEnum::MANAGE_TRANSACTIONS);
+        $this->usePrimaryCurrencyForGroup($this->fixture['active_group'], 'EUR');
+        $this->usePrimaryCurrencyForGroup($this->fixture['requested_group'], 'USD');
         $this->user    = $this->fixture['user'];
     }
 

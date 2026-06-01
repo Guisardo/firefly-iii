@@ -43,6 +43,8 @@ final class ShowControllerTest extends TestCase
     public function testIndexUsesExplicitRequestedGroupInsteadOfActiveGroup(): void
     {
         $fixture          = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $this->usePrimaryCurrencyForGroup($fixture['active_group'], 'EUR');
+        $this->usePrimaryCurrencyForGroup($fixture['requested_group'], 'USD');
         $requestedCreator = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
         $activeGroup      = $this->createWithdrawalInGroup($fixture['user'], $fixture['active_group']);
         $requestedGroup   = $this->createWithdrawalInGroup($requestedCreator, $fixture['requested_group']);
@@ -55,12 +57,15 @@ final class ShowControllerTest extends TestCase
         $response->assertJson(['meta' => ['pagination' => ['total' => 1]]]);
         self::assertSame((string) $requestedGroup->id, $response->json('data.0.id'));
         self::assertNotSame((string) $activeGroup->id, $response->json('data.0.id'));
+        self::assertSame('USD', $response->json('data.0.attributes.transactions.0.primary_currency_code'));
         self::assertSame($fixture['active_group']->id, $fixture['user']->refresh()->user_group_id);
     }
 
     public function testShowUsesExplicitRequestedGroup(): void
     {
         $fixture          = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $this->usePrimaryCurrencyForGroup($fixture['active_group'], 'EUR');
+        $this->usePrimaryCurrencyForGroup($fixture['requested_group'], 'USD');
         $requestedCreator = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
         $requestedGroup   = $this->createWithdrawalInGroup($requestedCreator, $fixture['requested_group']);
 
@@ -73,6 +78,7 @@ final class ShowControllerTest extends TestCase
 
         $response->assertOk();
         self::assertSame((string) $requestedGroup->id, $response->json('data.id'));
+        self::assertSame('USD', $response->json('data.attributes.transactions.0.primary_currency_code'));
     }
 
     public function testShowFailsClosedWhenRouteTransactionIsOutsideRequestedGroup(): void
@@ -104,6 +110,8 @@ final class ShowControllerTest extends TestCase
     public function testIndexWithoutExplicitGroupUsesSelectedDefaultAcrossMembers(): void
     {
         $fixture          = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $this->usePrimaryCurrencyForGroup($fixture['active_group'], 'EUR');
+        $this->usePrimaryCurrencyForGroup($fixture['requested_group'], 'USD');
         $activeCreator    = $this->createUserInGroup($fixture['active_group'], UserRoleEnum::OWNER);
         $requestedCreator = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
         $activeGroup      = $this->createWithdrawalInGroup($activeCreator, $fixture['active_group']);
@@ -116,6 +124,23 @@ final class ShowControllerTest extends TestCase
         $response->assertOk();
         $response->assertJson(['meta' => ['pagination' => ['total' => 1]]]);
         self::assertSame((string) $activeGroup->id, $response->json('data.0.id'));
+        self::assertSame('EUR', $response->json('data.0.attributes.transactions.0.primary_currency_code'));
+    }
+
+    public function testShowWithoutExplicitGroupUsesActiveDefaultPrimaryCurrency(): void
+    {
+        $fixture     = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $this->usePrimaryCurrencyForGroup($fixture['active_group'], 'EUR');
+        $this->usePrimaryCurrencyForGroup($fixture['requested_group'], 'USD');
+        $activeGroup = $this->createWithdrawalInGroup($fixture['user'], $fixture['active_group']);
+
+        Passport::actingAs($fixture['user']);
+
+        $response = $this->getJson(route('api.v1.transactions.show', ['transactionGroup' => $activeGroup->id]));
+
+        $response->assertOk();
+        self::assertSame((string) $activeGroup->id, $response->json('data.id'));
+        self::assertSame('EUR', $response->json('data.attributes.transactions.0.primary_currency_code'));
     }
 
     public function testShowWithoutExplicitGroupUsesSelectedDefaultAcrossMembers(): void

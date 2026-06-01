@@ -158,8 +158,40 @@ trait CreatesMultiGroupFixtures
         ]);
     }
 
+    protected function usePrimaryCurrencyForGroup(UserGroup $userGroup, string $code): TransactionCurrency
+    {
+        $currency = $this->findOrCreateCurrencyByCode($code);
+
+        foreach ($userGroup->currencies()->get() as $existing) {
+            $userGroup->currencies()->updateExistingPivot($existing->id, ['group_default' => false]);
+        }
+        $userGroup->currencies()->syncWithoutDetaching([$currency->id => ['group_default' => true]]);
+
+        return $currency;
+    }
+
     private function createUserGroup(string $title): UserGroup
     {
         return UserGroup::create(['title' => sprintf('%s %s', $title, substr(sha1($title.microtime(true).random_int(1, PHP_INT_MAX)), 0, 8))]);
+    }
+
+    private function findOrCreateCurrencyByCode(string $code): TransactionCurrency
+    {
+        $currency = TransactionCurrency::query()->where('code', $code)->first();
+        if (null !== $currency) {
+            return $currency;
+        }
+
+        $defaults = [
+            'EUR' => ['name' => 'Euro', 'symbol' => 'EUR', 'decimal_places' => 2, 'enabled' => true],
+            'USD' => ['name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'enabled' => true],
+        ];
+
+        return TransactionCurrency::create(array_merge(['code' => $code], $defaults[$code] ?? [
+            'name'           => $code,
+            'symbol'         => $code,
+            'decimal_places' => 2,
+            'enabled'        => true,
+        ]));
     }
 }

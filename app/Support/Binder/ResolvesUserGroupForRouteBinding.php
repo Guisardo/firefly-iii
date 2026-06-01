@@ -69,6 +69,13 @@ class ResolvesUserGroupForRouteBinding
             return $routeGroup;
         }
 
+        if (!self::hasExplicitUserGroup($route)) {
+            return null;
+        }
+        if (self::requestHasExplicitUserGroup()) {
+            self::requestedUserGroupId();
+        }
+
         $context = self::administrationContext();
         if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
             return $context->userGroup();
@@ -89,13 +96,7 @@ class ResolvesUserGroupForRouteBinding
             return null;
         }
 
-        try {
-            $userGroupId = ResolvesUserGroupParameter::resolve($request);
-        } catch (Throwable) {
-            return null;
-        }
-
-        return $userGroupId > 0 ? $userGroupId : null;
+        return ResolvesUserGroupParameter::resolve($request);
     }
 
     private static function requestHasExplicitUserGroup(): bool
@@ -139,7 +140,7 @@ class ResolvesUserGroupForRouteBinding
     private static function resolveAdministrationContext(): ?AdministrationContext
     {
         $request = self::request();
-        if (!$request instanceof Request || !app()->bound(AdministrationResolver::class) || !app()->bound(RouteRoleResolver::class)) {
+        if (!$request instanceof Request) {
             return null;
         }
 

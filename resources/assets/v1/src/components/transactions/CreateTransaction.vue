@@ -266,6 +266,8 @@
 </template>
 
 <script>
+import {scopedUrl} from "../../support/user-group-scope";
+
 export default {
     name: "CreateTransaction",
     components: {},
@@ -293,7 +295,7 @@ export default {
         },
         getAccount(accountId, slot) {
             const uri = './api/v1/accounts/' + accountId + '?_token=' + document.head.querySelector('meta[name="csrf-token"]').content;
-            axios.get(uri).then(response => {
+            axios.get(scopedUrl(uri)).then(response => {
                 let model = response.data.data.attributes;
                 model.type = this.fullAccountType(model.type, model.liability_type);
                 model.id = parseInt(response.data.data.id);
@@ -500,7 +502,7 @@ export default {
             let button = $('#submitButton');
             button.prop("disabled", true);
 
-            axios.post(uri, data).then(response => {
+            axios.post(scopedUrl(uri), data).then(response => {
                 // console.log('Did a successful POST');
                 // this method will ultimately send the user on (or not).
                 if (0 === this.collectAttachmentData(response)) {
@@ -636,12 +638,12 @@ export default {
                         attachable_type: 'TransactionJournal',
                         attachable_id: fileData[key].journal,
                     };
-                    axios.post(uri, data)
+                    axios.post(scopedUrl(uri), data)
                         .then(response => {
                             // console.log('Created attachment #' + key);
                             // console.log('Uploading attachment #' + key);
                             const uploadUri = './api/v1/attachments/' + response.data.data.id + '/upload';
-                            axios.post(uploadUri, fileData[key].content)
+                            axios.post(scopedUrl(uploadUri), fileData[key].content)
                                 .then(attachmentResponse => {
                                     // console.log('Uploaded attachment #' + key);
                                     uploads++;

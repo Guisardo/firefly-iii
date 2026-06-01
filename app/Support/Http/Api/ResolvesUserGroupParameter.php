@@ -38,18 +38,15 @@ final class ResolvesUserGroupParameter
         $values = [];
 
         if ($request->query->has(self::PARAMETER)) {
-            $queryValue = $request->query->all()[self::PARAMETER] ?? null;
-            $values     = array_merge($values, is_array($queryValue) ? $queryValue : [$queryValue]);
+            $values[] = $request->query->all()[self::PARAMETER] ?? null;
         }
 
         if ($request->request->has(self::PARAMETER)) {
-            $bodyValue = $request->request->all()[self::PARAMETER] ?? null;
-            $values[]  = $bodyValue;
+            $values[] = $request->request->all()[self::PARAMETER] ?? null;
         }
 
         if ($request->isJson() && $request->json()->has(self::PARAMETER)) {
-            $jsonValue = $request->json()->all()[self::PARAMETER] ?? null;
-            $values[]  = $jsonValue;
+            $values[] = $request->json()->all()[self::PARAMETER] ?? null;
         }
 
         return $values;
@@ -90,7 +87,7 @@ final class ResolvesUserGroupParameter
     private static function throwInvalid(): never
     {
         $validator = Validator::make([], []);
-        $validator->errors()->add('user_group_id', 'The user group id field must be a positive integer.');
+        $validator->errors()->add(self::PARAMETER, 'The user group id field must be a positive integer.');
 
         throw new ValidationException($validator);
     }

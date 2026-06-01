@@ -24,10 +24,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,6 +41,10 @@ use Illuminate\View\View;
  */
 final class DeleteController extends Controller
 {
+    use UsesSharedAdministrationContext;
+
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
+
     /** @var AccountRepositoryInterface The account repository */
     private $repository;
 
@@ -70,6 +76,7 @@ final class DeleteController extends Controller
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
+        $this->applyResolvedUserGroup($this->repository);
 
         $typeName    = config(sprintf('firefly.shortNamesByFullName.%s', $account->accountType->type));
         $subTitle    = (string) trans(sprintf('firefly.delete_%s_account', $typeName), ['name' => $account->name]);
@@ -80,7 +87,13 @@ final class DeleteController extends Controller
         // put previous url in session
         $this->rememberPreviousUrl('accounts.delete.url');
 
-        return view('accounts.delete', ['account' => $account, 'subTitle' => $subTitle, 'accountList' => $accountList, 'objectType' => $objectType]);
+        return view('accounts.delete', [
+            'account'     => $account,
+            'subTitle'    => $subTitle,
+            'accountList' => $accountList,
+            'objectType'  => $objectType,
+            'userGroupId' => $this->resolvedUserGroup()?->id,
+        ]);
     }
 
     /**
@@ -91,6 +104,7 @@ final class DeleteController extends Controller
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
+        $this->applyResolvedUserGroup($this->repository);
 
         $type     = $account->accountType->type;
         $typeName = config(sprintf('firefly.shortNamesByFullName.%s', $type));

@@ -24,6 +24,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\Account;
 
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Helpers\Attachments\AttachmentHelperInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Http\Requests\AccountFormRequest;
@@ -33,6 +34,7 @@ use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\ModelInformation;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,7 +48,9 @@ use Illuminate\View\View;
 final class EditController extends Controller
 {
     use ModelInformation;
+    use UsesSharedAdministrationContext;
 
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
     private AttachmentHelperInterface $attachments;
     private AccountRepositoryInterface $repository;
 
@@ -84,6 +88,8 @@ final class EditController extends Controller
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
+        $this->applyResolvedUserGroup($repository);
+        $this->applyResolvedUserGroup($this->repository);
 
         $objectType           = config('firefly.shortNamesByFullName')[$account->accountType->type];
         $subTitle             = (string) trans(sprintf('firefly.edit_%s_account', $objectType), ['name' => $account->name]);
@@ -177,6 +183,7 @@ final class EditController extends Controller
             'preFilled'           => $preFilled,
             'liabilityTypes'      => $liabilityTypes,
             'interestPeriods'     => $interestPeriods,
+            'userGroupId'         => $this->resolvedUserGroup()?->id,
         ]);
     }
 
@@ -190,6 +197,7 @@ final class EditController extends Controller
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
+        $this->applyResolvedUserGroup($this->repository);
 
         $data     = $request->getAccountData();
         $this->repository->update($account, $data);
@@ -217,7 +225,13 @@ final class EditController extends Controller
             // set value so edit routine will not overwrite URL:
             $request->session()->put('accounts.edit.fromUpdate', true);
 
-            $redirect = redirect(route('accounts.edit', [$account->id]))->withInput(['return_to_edit' => 1]);
+            $parameters = [$account->id];
+            $userGroup  = $this->resolvedUserGroup();
+            if (null !== $userGroup) {
+                $parameters['user_group_id'] = $userGroup->id;
+            }
+
+            $redirect = redirect(route('accounts.edit', $parameters))->withInput(['return_to_edit' => 1]);
         }
         Preferences::mark();
 

@@ -23,12 +23,15 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Requests;
 
+use Closure;
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\Location;
+use FireflyIII\Models\UserGroup;
 use FireflyIII\Rules\IsValidAmount;
 use FireflyIII\Rules\UniqueIban;
 use FireflyIII\Support\Facades\Steam;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\Request\AppendsLocationData;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
@@ -42,7 +45,9 @@ use Illuminate\Support\Facades\Log;
 class AccountFormRequest extends FormRequest
 {
     use AppendsLocationData;
-    use ChecksLogin;
+    use ChecksLogin {
+        getUserGroup as private getDefaultUserGroup;
+    }
     use ConvertsDataTypes;
 
     protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
@@ -127,12 +132,39 @@ class AccountFormRequest extends FormRequest
         $account        = $this->route()->parameter('account');
         if (null !== $account) {
             // add rules:
-            $rules['id']   = 'belongsToUser:accounts';
-            $rules['name'] = 'required|max:1024|min:1|uniqueAccountForUser:'.$account->id;
-            $rules['iban'] = ['iban', 'nullable', new UniqueIban($account, $account->accountType->type)];
+            $resolvedUserGroup = $this->resolvedUserGroup();
+            $rules['id']       = $resolvedUserGroup instanceof UserGroup
+                ? $this->accountBelongsToResolvedUserGroup($account, $resolvedUserGroup)
+                : 'belongsToUser:accounts';
+            $rules['name']     = 'required|max:1024|min:1|uniqueAccountForUser:'.$account->id;
+            $rules['iban']     = ['iban', 'nullable', new UniqueIban($account, $account->accountType->type)];
         }
 
         return $rules;
+    }
+
+    public function getUserGroup(): ?UserGroup
+    {
+        $userGroup = $this->resolvedUserGroup();
+        if ($userGroup instanceof UserGroup) {
+            return $userGroup;
+        }
+
+        return $this->getDefaultUserGroup();
+    }
+
+    private function accountBelongsToResolvedUserGroup(Account $account, UserGroup $userGroup): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail) use ($account, $userGroup): void {
+            if ((int) $value !== $account->id) {
+                $fail('validation.belongs_user_or_user_group')->translate();
+
+                return;
+            }
+            if ($account->user_group_id !== $userGroup->id) {
+                $fail('validation.belongs_user_or_user_group')->translate();
+            }
+        };
     }
 
     public function withValidator(Validator $validator): void
@@ -140,5 +172,23 @@ class AccountFormRequest extends FormRequest
         if ($validator->fails()) {
             Log::channel('audit')->error(sprintf('Validation errors in %s', self::class), $validator->errors()->toArray());
         }
+    }
+
+    private function resolvedUserGroup(): ?UserGroup
+    {
+        $context = $this->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE);
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return $context->userGroup();
+        }
+        if (!app()->bound(AdministrationContext::class)) {
+            return null;
+        }
+
+        $context = app(AdministrationContext::class);
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return $context->userGroup();
+        }
+
+        return null;
     }
 }

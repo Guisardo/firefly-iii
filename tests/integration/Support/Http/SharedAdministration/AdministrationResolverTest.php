@@ -29,6 +29,7 @@ use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Tests\integration\TestCase;
@@ -139,18 +140,61 @@ class AdministrationResolverTest extends TestCase
         $fixture = $this->createMultiGroupUserFixture();
         $request = $this->requestFor($fixture['user'], ['user_group_id' => null]);
 
-        $this->expectException(AuthorizationException::class);
+        $this->expectException(ValidationException::class);
 
         $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
     }
 
     #[DataProvider('malformedUserGroupIds')]
-    public function testMalformedExplicitUserGroupIdIsDenied(mixed $userGroupId): void
+    public function testMalformedExplicitUserGroupIdFailsValidation(mixed $userGroupId): void
     {
         $fixture = $this->createMultiGroupUserFixture();
         $request = $this->requestFor($fixture['user'], ['user_group_id' => $userGroupId]);
 
-        $this->expectException(AuthorizationException::class);
+        $this->expectException(ValidationException::class);
+
+        $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+    }
+
+    public function testConflictingExplicitUserGroupIdsFailWithConflict(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $request = $this->requestWithQueryAndForm($fixture['user'], $fixture['active_group']->id, $fixture['requested_group']->id);
+
+        $this->expectException(ConflictHttpException::class);
+
+        $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+    }
+
+    public function testSameExplicitQueryAndFormUserGroupIdResolves(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $request = $this->requestWithQueryAndForm($fixture['user'], $fixture['requested_group']->id, $fixture['requested_group']->id);
+
+        $context = $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+
+        $this->assertInstanceOf(AdministrationContext::class, $context);
+        $this->assertSame($fixture['requested_group']->id, $context->userGroup()->id);
+    }
+
+    public function testJsonBodyUserGroupIdResolvesRequestedGroup(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $request = $this->jsonRequestFor($fixture['user'], ['user_group_id' => $fixture['requested_group']->id]);
+
+        $context = $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
+
+        $this->assertInstanceOf(AdministrationContext::class, $context);
+        $this->assertSame($fixture['requested_group']->id, $context->userGroup()->id);
+    }
+
+    public function testConflictingQueryAndJsonUserGroupIdsFailWithConflict(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $request = $this->jsonRequestFor($fixture['user'], ['user_group_id' => $fixture['requested_group']->id]);
+        $request->query->set('user_group_id', $fixture['active_group']->id);
+
+        $this->expectException(ConflictHttpException::class);
 
         $this->resolver()->resolve($request, [UserRoleEnum::READ_ONLY]);
     }
@@ -249,12 +293,24 @@ class AdministrationResolverTest extends TestCase
             'empty string'   => [''],
             'zero'           => ['0'],
             'negative'       => ['-1'],
-            'float string'   => ['1.5'],
-            'mixed string'   => ['1abc'],
-            'boolean'        => [true],
-            'array'          => [[[1]]],
+            'float string'   => ['1.2'],
+            'mixed string'   => ['abc'],
+            'true boolean'   => [true],
+            'false boolean'  => [false],
+            'array'          => [[1]],
+            'scientific'     => ['1e2'],
+            'leading zero'   => ['01'],
             'overflow'       => ['92233720368547758070'],
         ];
+    }
+
+    private function requestWithQueryAndForm($user, int $queryUserGroupId, int $formUserGroupId): Request
+    {
+        $request = Request::create('/api/v1/accounts', 'POST', ['user_group_id' => $formUserGroupId]);
+        $request->query->set('user_group_id', $queryUserGroupId);
+        $request->setUserResolver(static fn () => $user);
+
+        return $request;
     }
 
     private function resolver(): AdministrationResolver
@@ -271,7 +327,7 @@ class AdministrationResolverTest extends TestCase
             [],
             [],
             ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'],
-            json_encode($payload)
+            json_encode($payload, JSON_THROW_ON_ERROR)
         );
         $request->setUserResolver(static fn () => $user);
 
