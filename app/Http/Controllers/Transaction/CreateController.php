@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII\Http\Controllers\Transaction;
 
 use FireflyIII\Http\Controllers\Controller;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Repositories\TransactionGroup\TransactionGroupRepositoryInterface;
@@ -46,6 +47,7 @@ use function Safe\parse_url;
  */
 final class CreateController extends Controller
 {
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
     private TransactionGroupRepositoryInterface $repository;
 
     /**

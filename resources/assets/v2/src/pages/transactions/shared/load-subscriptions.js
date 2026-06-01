@@ -19,11 +19,12 @@
  */
 
 import SubscriptionGet from "../../../api/v1/model/subscription/get.js";
+import {scopedParams} from "./add-autocomplete.js";
 
 export function loadSubscriptions() {
-    let params = {
+    let params = scopedParams({
         page: 1, limit: 1337
-    };
+    });
     let getter = new SubscriptionGet();
     return getter.list(params).then((response) => {
         let subscriptions = {

@@ -30,7 +30,7 @@ import {loadPiggyBanks} from "./shared/load-piggy-banks.js";
 import {loadSubscriptions} from "./shared/load-subscriptions.js";
 
 import 'leaflet/dist/leaflet.css';
-import {addAutocomplete, getUrls} from "./shared/add-autocomplete.js";
+import {addAutocomplete, getUrls, scopedParams} from "./shared/add-autocomplete.js";
 import {
     changeCategory,
     changeDescription,
@@ -378,6 +378,7 @@ let transactions = function () {
                 apply_rules: this.formStates.rulesButton,
                 transactions: transactions
             };
+            let requestParams = scopedParams({});
 
             // catch for group title:
             // TODO later this must be handled with more care (ie use the group title input)
@@ -388,7 +389,7 @@ let transactions = function () {
             // submit the transaction. Multi-stage process thing going on here!
             let poster = new Post();
             console.log(submission);
-            poster.post(submission).then((response) => {
+            poster.post(submission, requestParams).then((response) => {
                 const group = response.data.data;
                 // submission was a success!
                 this.groupProperties.id = parseInt(group.id);

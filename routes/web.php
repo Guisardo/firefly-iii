@@ -1340,7 +1340,9 @@ Route::group(
         ;
 
         // create group:
-        Route::get('create/{objectType}', ['uses' => 'Transaction\CreateController@create', 'as' => 'create']);
+        Route::get('create/{objectType}', ['uses' => 'Transaction\CreateController@create', 'as' => 'create'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
         Route::post('store', ['uses' => 'Transaction\CreateController@store', 'as' => 'store']);
 
         // clone group

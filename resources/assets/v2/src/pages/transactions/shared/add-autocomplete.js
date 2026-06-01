@@ -20,6 +20,22 @@
 
 import Autocomplete from "bootstrap5-autocomplete";
 
+export function selectedUserGroupId() {
+    const params = new URLSearchParams(window.location.search);
+    const userGroupId = parseInt(params.get('user_group_id') ?? 0);
+
+    return userGroupId > 0 ? userGroupId : 0;
+}
+
+export function scopedParams(params = {}) {
+    const userGroupId = selectedUserGroupId();
+    if (userGroupId > 0) {
+        params.user_group_id = userGroupId;
+    }
+
+    return params;
+}
+
 export function getUrls() {
     return {
         description: '/api/v1/autocomplete/transaction-descriptions',
@@ -32,7 +48,7 @@ export function getUrls() {
 export function addAutocomplete(options) {
     const params = {
         server: options.serverUrl,
-        serverParams: {},
+        serverParams: scopedParams({}),
         fetchOptions: {
             headers: {
                 'X-CSRF-TOKEN': document.head.querySelector('meta[name="csrf-token"]').content
