@@ -5,12 +5,13 @@
 {% endblock %}
 
 {% block content %}
+    {% set userGroupQuery = userGroupId is defined and userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
 
     {# upper show-all instruction #}
     {% if periods|length > 0 %}
         <div class="row">
             <div class="col-lg-offset-10 col-lg-2 col-md-offset-10 col-md-2 col-sm-12 col-xs-12">
-                <p class="small text-center"><a href="{{ route('transactions.index.all',[objectType]) }}">{{ 'showEverything'|_ }}</a></p>
+                <p class="small text-center"><a href="{{ route('transactions.index.all',[objectType]) }}{{ userGroupQuery }}">{{ 'showEverything'|_ }}</a></p>
             </div>
         </div>
     {% endif %}
@@ -77,9 +78,11 @@
                     <h3 class="box-title">{{ subTitle }}</h3>
                 </div>
                 <div class="box-body no-padding">
-                    <div class="p-2">
-                        <a href="{{ route('transactions.create', [objectType]) }}" class="btn btn-success"><span class="fa fa-plus fa-fw"></span> {{ 'create_new_transaction'|_ }}</a>
-                    </div>
+                    {% if objectType != 'all' %}
+                        <div class="p-2">
+                            <a href="{{ route('transactions.create', [objectType]) }}{{ userGroupQuery }}" class="btn btn-success"><span class="fa fa-plus fa-fw"></span> {{ 'create_new_transaction'|_ }}</a>
+                        </div>
+                    {% endif %}
                     {# actual list #}
                     {% include 'list.groups' %}
                 </div>
@@ -88,12 +91,12 @@
                     {% if periods|length > 0 %}
                         <p>
                             <span class="fa fa-calendar"></span>
-                            <a href="{{ route('transactions.index.all', [objectType]) }}">{{ 'show_all_no_filter'|_ }}</a>
+                            <a href="{{ route('transactions.index.all', [objectType]) }}{{ userGroupQuery }}">{{ 'show_all_no_filter'|_ }}</a>
                         </p>
                     {% else %}
                         <p>
                             <span class="fa fa-calendar"></span>
-                            <a href="{{ route('transactions.index', [objectType]) }}">{{ 'show_the_current_period_and_overview'|_ }}</a>
+                            <a href="{{ route('transactions.index', [objectType]) }}{{ userGroupQuery }}">{{ 'show_the_current_period_and_overview'|_ }}</a>
                         </p>
                     {% endif %}
                 </div>
@@ -113,22 +116,23 @@
     {% if periods|length > 0 %}
         <div class="row">
             <div class="col-lg-offset-10 col-lg-2 col-md-offset-10 col-md-2 col-sm-12 col-xs-12">
-                <p class="small text-center"><a href="{{ route('transactions.index.all', [objectType]) }}">{{ 'showEverything'|_ }}</a></p>
+                <p class="small text-center"><a href="{{ route('transactions.index.all', [objectType]) }}{{ userGroupQuery }}">{{ 'showEverything'|_ }}</a></p>
             </div>
         </div>
     {% endif %}
 
 {% endblock %}
 {% block scripts %}
+    {% set userGroupQuery = userGroupId is defined and userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
+
     {# required for groups.twig #}
     <script type="text/javascript" src="v1/js/ff/list/groups.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>
     <script type="text/javascript" nonce="{{ JS_NONCE }}">
         var showAll = {% if periods|length > 0 %}false{% else %}true{% endif %};
-
-        var categoryChartUrl = '{{ route('chart.transactions.categories', [objectType, start.format('Y-m-d'), end.format('Y-m-d')]) }}';
-        var budgetChartUrl = '{{ route('chart.transactions.budgets', [start.format('Y-m-d'), end.format('Y-m-d')]) }}';
-        var destinationChartUrl = '{{ route('chart.transactions.destinationAccounts', [objectType, start.format('Y-m-d'), end.format('Y-m-d')]) }}';
-        var sourceChartUrl = '{{ route('chart.transactions.sourceAccounts', [objectType, start.format('Y-m-d'), end.format('Y-m-d')]) }}';
+        var categoryChartUrl = '{{ route('chart.transactions.categories', [objectType, start.format('Y-m-d'), end.format('Y-m-d')]) }}{{ userGroupQuery }}';
+        var budgetChartUrl = '{{ route('chart.transactions.budgets', [start.format('Y-m-d'), end.format('Y-m-d')]) }}{{ userGroupQuery }}';
+        var destinationChartUrl = '{{ route('chart.transactions.destinationAccounts', [objectType, start.format('Y-m-d'), end.format('Y-m-d')]) }}{{ userGroupQuery }}';
+        var sourceChartUrl = '{{ route('chart.transactions.sourceAccounts', [objectType, start.format('Y-m-d'), end.format('Y-m-d')]) }}{{ userGroupQuery }}';
 
     </script>
     <script type="text/javascript" src="v1/js/lib/Chart.bundle.min.js?v={{ FF_BUILD_TIME }}" nonce="{{ JS_NONCE }}"></script>

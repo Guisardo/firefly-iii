@@ -49,6 +49,8 @@
 </template>
 
 <script>
+import {scopedUrl} from "../../support/user-group-scope";
+
 export default {
   name: "Bill",
   props: {
@@ -89,7 +91,7 @@ export default {
     },
     loadBills: function () {
       let URI = document.getElementsByTagName('base')[0].href + 'api/v1/autocomplete/bills?limit=1337';
-      axios.get(URI, {}).then((res) => {
+      axios.get(scopedUrl(URI), {}).then((res) => {
         this.bills = [
           {
             name: this.no_bill,

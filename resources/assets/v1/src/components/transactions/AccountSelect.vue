@@ -70,6 +70,8 @@
 
 </template>
 <script>
+import {scopedUrl} from "../../support/user-group-scope";
+
 export default {
   props: {
     inputName: String,
@@ -137,7 +139,7 @@ export default {
   methods:
       {
         aSyncFunction: function (query, done) {
-          axios.get(this.accountAutoCompleteURI + query)
+          axios.get(scopedUrl(this.accountAutoCompleteURI + query))
               .then(res => {
                 done(res.data);
               })

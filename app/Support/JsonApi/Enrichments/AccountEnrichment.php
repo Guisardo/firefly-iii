@@ -70,7 +70,7 @@ class AccountEnrichment implements EnrichmentInterface
     private array   $notes           = [];
     private array   $objectGroups    = [];
     private array   $openingBalances = [];
-    private readonly TransactionCurrency $primaryCurrency;
+    private TransactionCurrency $primaryCurrency;
     private array   $sort            = [];
     private ?Carbon $start           = null;
     private array   $startBalances   = [];
@@ -162,7 +162,8 @@ class AccountEnrichment implements EnrichmentInterface
 
     public function setUserGroup(UserGroup $userGroup): void
     {
-        $this->userGroup = $userGroup;
+        $this->userGroup       = $userGroup;
+        $this->primaryCurrency = Amount::getPrimaryCurrencyByUserGroup($userGroup);
     }
 
     private function appendCollectedData(): void

@@ -5,10 +5,15 @@
 {% endblock %}
 
 {% block content %}
+    {% set userGroupId = userGroupId|default(0) %}
+    {% set userGroupQuery = userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
 
-    <form method="POST" action="{{ route('accounts.destroy',account.id) }}" accept-charset="UTF-8"
+    <form method="POST" action="{{ route('accounts.destroy',account.id) }}{{ userGroupQuery }}" accept-charset="UTF-8"
           class="form-horizontal" id="destroy">
         <input name="_token" type="hidden" value="{{ csrf_token() }}">
+        {% if userGroupId %}
+            <input type="hidden" name="user_group_id" value="{{ userGroupId }}"/>
+        {% endif %}
         <div class="row">
             <div class="col-lg-6 col-lg-offset-3 col-md-12 col-sm-12">
                 <div class="box box-danger">

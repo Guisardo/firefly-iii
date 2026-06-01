@@ -1,0 +1,172 @@
+<?php
+
+/*
+ * ResolvesUserGroupForRouteBinding.php
+ * Copyright (c) 2026 james@firefly-iii.org
+ *
+ * This file is part of Firefly III (https://github.com/firefly-iii).
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+declare(strict_types=1);
+
+namespace FireflyIII\Support\Binder;
+
+use FireflyIII\Models\UserGroup;
+use FireflyIII\Support\Http\Api\ResolvesUserGroupParameter;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
+use FireflyIII\Support\Http\SharedAdministration\RouteRoleResolver;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
+use Throwable;
+
+class ResolvesUserGroupForRouteBinding
+{
+    public static function hasExplicitUserGroup(?Route $route = null): bool
+    {
+        if (null !== self::routeParameter($route, 'userGroup')) {
+            return true;
+        }
+
+        $context = self::administrationContext();
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return true;
+        }
+
+        $request = self::request();
+
+        return $request instanceof Request && ResolvesUserGroupParameter::hasExplicitUserGroup($request);
+    }
+
+    public static function resolvedUserGroup(?Route $route = null): ?UserGroup
+    {
+        $routeGroup = self::routeParameter($route, 'userGroup');
+        if ($routeGroup instanceof UserGroup) {
+            if (self::requestHasExplicitUserGroup()) {
+                $requestedGroupId = self::requestedUserGroupId();
+                if (null === $requestedGroupId || $routeGroup->id !== $requestedGroupId) {
+                    return null;
+                }
+            }
+
+            if (!$routeGroup->exists) {
+                return null;
+            }
+
+            return $routeGroup;
+        }
+
+        if (!self::hasExplicitUserGroup($route)) {
+            return null;
+        }
+        if (self::requestHasExplicitUserGroup()) {
+            self::requestedUserGroupId();
+        }
+
+        $context = self::administrationContext();
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return $context->userGroup();
+        }
+
+        $context = self::resolveAdministrationContext();
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return $context->userGroup();
+        }
+
+        return null;
+    }
+
+    private static function requestedUserGroupId(): ?int
+    {
+        $request = self::request();
+        if (!$request instanceof Request || !self::requestHasExplicitUserGroup()) {
+            return null;
+        }
+
+        return ResolvesUserGroupParameter::resolve($request);
+    }
+
+    private static function requestHasExplicitUserGroup(): bool
+    {
+        $request = self::request();
+
+        return $request instanceof Request && ResolvesUserGroupParameter::hasExplicitUserGroup($request);
+    }
+
+    private static function request(): ?Request
+    {
+        if (!app()->bound('request')) {
+            return null;
+        }
+
+        $request = app('request');
+
+        return $request instanceof Request ? $request : null;
+    }
+
+    private static function administrationContext(): ?AdministrationContext
+    {
+        $context = self::request()?->attributes->get(AdministrationContext::REQUEST_ATTRIBUTE);
+        if ($context instanceof AdministrationContext) {
+            return $context;
+        }
+
+        if (!app()->bound(AdministrationContext::class)) {
+            return null;
+        }
+
+        try {
+            $context = app(AdministrationContext::class);
+
+            return $context instanceof AdministrationContext ? $context : null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private static function resolveAdministrationContext(): ?AdministrationContext
+    {
+        $request = self::request();
+        if (!$request instanceof Request) {
+            return null;
+        }
+
+        /** @var RouteRoleResolver $roleResolver */
+        $roleResolver = app(RouteRoleResolver::class);
+        $roles        = $roleResolver->acceptedRolesFor($request);
+        if ([] === $roles) {
+            return null;
+        }
+
+        /** @var AdministrationResolver $resolver */
+        $resolver     = app(AdministrationResolver::class);
+
+        return $resolver->resolve($request, $roles);
+    }
+
+    private static function routeParameter(?Route $route, string $parameter): mixed
+    {
+        if (null === $route) {
+            return null;
+        }
+
+        try {
+            return $route->parameter($parameter);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+}

@@ -26,6 +26,7 @@ import formatMoney from "../../util/format-money.js";
 
 import '../../css/grid-ff3-theme.css';
 import Get from "../../api/v1/model/transaction/get.js";
+import {scopedParams} from "../shared/user-group-scope.js";
 
 let index = function () {
     return {
@@ -82,11 +83,12 @@ let index = function () {
             this.notifications.wait.show = true;
             this.notifications.wait.text = i18next.t('firefly.wait_loading_data')
             this.transactions = [];
-            const urlParts = window.location.href.split('/');
+            const urlParts = window.location.href.split('?')[0].split('/');
             const type = urlParts[urlParts.length - 1];
             let getter = new Get();
+            let params = scopedParams({page: page, type: type});
 
-            getter.list({page: page, type: type}).then(response => {
+            getter.list(params).then(response => {
                 this.parseTransactions(response.data.data)
 
                 // set meta data

@@ -32,6 +32,7 @@ use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Http\Controllers\PeriodOverview;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -44,6 +45,7 @@ use Psr\Container\NotFoundExceptionInterface;
 final class IndexController extends Controller
 {
     use PeriodOverview;
+    use UsesSharedAdministrationContext;
 
     private JournalRepositoryInterface $repository;
 
@@ -81,7 +83,9 @@ final class IndexController extends Controller
         }
 
         $subTitleIcon  = config('firefly.transactionIconsByType.'.$objectType);
-        $types         = config('firefly.transactionTypesByType.'.$objectType);
+        $types         = $this->getTransactionTypes($objectType);
+        abort_if([] === $types, 404);
+        $this->applyResolvedUserGroup($this->repository);
         $page          = (int) $request->get('page');
         $pageSize      = (int) Preferences::get('listPageSize', 50)->data;
 
@@ -114,6 +118,7 @@ final class IndexController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector     = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
 
         $collector
             ->setRange($start, $end)
@@ -127,6 +132,7 @@ final class IndexController extends Controller
         ;
         $groups        = $collector->getPaginatedGroups();
         $groups->setPath($path);
+        $this->appendResolvedUserGroupQuery($groups);
 
         return view('transactions.index', [
             'subTitle'     => $subTitle,
@@ -136,6 +142,7 @@ final class IndexController extends Controller
             'periods'      => $periods,
             'start'        => $start,
             'end'          => $end,
+            'userGroupId'  => $this->resolvedUserGroup()?->id,
         ]);
     }
 
@@ -150,7 +157,9 @@ final class IndexController extends Controller
     public function indexAll(Request $request, string $objectType): Factory|\Illuminate\Contracts\View\View
     {
         $subTitleIcon = config('firefly.transactionIconsByType.'.$objectType);
-        $types        = config('firefly.transactionTypesByType.'.$objectType);
+        $types        = $this->getTransactionTypes($objectType);
+        abort_if([] === $types, 404);
+        $this->applyResolvedUserGroup($this->repository);
         $page         = (int) $request->get('page');
         $pageSize     = (int) Preferences::get('listPageSize', 50)->data;
         $path         = route('transactions.index.all', [$objectType]);
@@ -162,6 +171,7 @@ final class IndexController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector    = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
 
         $collector
             ->setRange($start, $end)
@@ -175,6 +185,7 @@ final class IndexController extends Controller
         ;
         $groups       = $collector->getPaginatedGroups();
         $groups->setPath($path);
+        $this->appendResolvedUserGroupQuery($groups);
 
         return view('transactions.index', [
             'subTitle'     => $subTitle,
@@ -183,6 +194,12 @@ final class IndexController extends Controller
             'groups'       => $groups,
             'start'        => $start,
             'end'          => $end,
+            'userGroupId'  => $this->resolvedUserGroup()?->id,
         ]);
+    }
+
+    private function getTransactionTypes(string $objectType): array
+    {
+        return config(sprintf('firefly.transactionTypesByType.%s', $objectType), []);
     }
 }

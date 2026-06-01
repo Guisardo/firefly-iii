@@ -25,4 +25,9 @@ export default class Put {
         let url = '/api/v1/user-groups/' + parseInt(params.id);
         return api.put(url, submission);
     }
+
+    updateMembership(groupId, submission) {
+        let url = '/api/v1/user-groups/' + parseInt(groupId) + '/update-membership';
+        return api.put(url, submission);
+    }
 }

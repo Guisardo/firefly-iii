@@ -114,6 +114,12 @@
                     </ul>
                 </li>
                 <li class="nav-header">{{ strtoupper(__('firefly.others'))  }}</li>
+                <li class="nav-item">
+                    <a href="{{ route('administrations.index') }}" class="nav-link @partialroute('administrations') active @endpartialroute">
+                        <i class="nav-icon fa-solid fa-users-gear"></i>
+                        <p>{{ __('firefly.administrations_index_menu') }}</p>
+                    </a>
+                </li>
                 <li class="nav-item @partialroute('accounts') menu-open @endpartialroute">
                     <a href="#" class="nav-link @partialroute('accounts') active @endpartialroute">
                         <i class="nav-icon fa-regular fa-credit-card"></i>

@@ -53,6 +53,7 @@ return [
     'deposit_list'           => 'Revenue, income and deposits',
     'transfer_list'          => 'Transfers',
     'transfers_list'         => 'Transfers',
+    'all_list'               => 'All transactions',
 
     'reconciliation_list'    => 'Reconciliations',
     'create_withdrawal'      => 'Create new withdrawal',

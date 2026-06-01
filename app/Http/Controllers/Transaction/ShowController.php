@@ -31,6 +31,7 @@ use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\AuditLogEntry\ALERepositoryInterface;
 use FireflyIII\Repositories\TransactionGroup\TransactionGroupRepositoryInterface;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use FireflyIII\Support\JsonApi\Enrichments\TransactionGroupEnrichment;
 use FireflyIII\Transformers\TransactionGroupTransformer;
 use FireflyIII\User;
@@ -45,6 +46,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final class ShowController extends Controller
 {
+    use UsesSharedAdministrationContext;
+
     private ALERepositoryInterface $aleRepository;
     private TransactionGroupRepositoryInterface $repository;
 
@@ -84,10 +87,12 @@ final class ShowController extends Controller
     {
         /** @var User $admin */
         $admin           = auth()->user();
+        $this->applyResolvedUserGroup($this->repository);
 
         // use new group collector:
         /** @var GroupCollectorInterface $collector */
         $collector       = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
         $collector->setUser($admin)->setTransactionGroup($transactionGroup)->withAPIInformation();
 
         /** @var null|TransactionGroup $selectedGroup */
@@ -99,6 +104,7 @@ final class ShowController extends Controller
         // enrich
         $enrichment      = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $this->applyResolvedUserGroup($enrichment);
         $selectedGroup   = $enrichment->enrichSingle($selectedGroup);
 
         $splits          = count($selectedGroup['transactions']);
@@ -116,6 +122,7 @@ final class ShowController extends Controller
         // enrich
         $enrichment      = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $this->applyResolvedUserGroup($enrichment);
 
         /** @var array $selectedGroup */
         $selectedGroup   = $enrichment->enrichSingle($selectedGroup);

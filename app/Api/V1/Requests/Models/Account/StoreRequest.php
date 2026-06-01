@@ -24,11 +24,11 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Requests\Models\Account;
 
+use FireflyIII\Api\V1\Requests\Models\Concerns\ValidatesSelectedUserGroup;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Location;
 use FireflyIII\Rules\IsBoolean;
 use FireflyIII\Rules\IsValidPositiveAmount;
-use FireflyIII\Rules\UniqueAccountNumber;
-use FireflyIII\Rules\UniqueIban;
 use FireflyIII\Support\Request\AppendsLocationData;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
@@ -40,10 +40,22 @@ use Illuminate\Foundation\Http\FormRequest;
 class StoreRequest extends FormRequest
 {
     use AppendsLocationData;
-    use ChecksLogin;
+    use ChecksLogin {
+        authorize as authorizeLoggedIn;
+    }
     use ConvertsDataTypes;
+    use ValidatesSelectedUserGroup;
 
     protected array $acceptedRoles = [];
+
+    public function authorize(): bool
+    {
+        if (!$this->authorizeLoggedIn()) {
+            return false;
+        }
+
+        return $this->authorizeSelectedUserGroup([UserRoleEnum::MANAGE_TRANSACTIONS]);
+    }
 
     public function getAllAccountData(): array
     {
@@ -77,6 +89,9 @@ class StoreRequest extends FormRequest
             'interest'                => $this->convertString('interest'),
             'interest_period'         => $this->convertString('interest_period'),
         ];
+        if (null !== $this->selectedUserGroupId()) {
+            $data['user_group_id'] = $this->selectedUserGroupId();
+        }
         // append location information.
         $data            = $this->appendLocationData($data, null);
 
@@ -99,11 +114,12 @@ class StoreRequest extends FormRequest
         $ccPaymentTypes = implode(',', array_keys(config('firefly.ccTypes')));
         $type           = $this->convertString('type');
         $rules          = [
-            'name'                 => ['required', 'max:1024', 'min:1', 'uniqueAccountForUser'],
+            'user_group_id'        => $this->userGroupIdRule(),
+            'name'                 => ['required', 'max:1024', 'min:1', $this->uniqueAccountNameForUserOrSelectedGroup(null, $type)],
             'type'                 => sprintf('required|max:1024|min:1|in:%s', $types),
-            'iban'                 => ['iban', 'nullable', new UniqueIban(null, $type)],
+            'iban'                 => ['iban', 'nullable', $this->uniqueIbanForUserOrSelectedGroup(null, $type)],
             'bic'                  => ['bic', 'nullable'],
-            'account_number'       => ['min:1', 'max:255', 'nullable', new UniqueAccountNumber(null, $type)],
+            'account_number'       => ['min:1', 'max:255', 'nullable', $this->uniqueAccountNumberForUserOrSelectedGroup(null, $type)],
             'opening_balance'      => ['numeric', 'required_with:opening_balance_date', 'nullable'],
             'opening_balance_date' => ['date', 'required_with:opening_balance', 'nullable'],
             'virtual_balance'      => ['numeric', 'nullable'],

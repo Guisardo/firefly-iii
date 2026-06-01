@@ -26,6 +26,7 @@ namespace FireflyIII\Api\V1\Controllers\Models\Account;
 
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\Account\ShowRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Http\Api\AccountFilter;
@@ -33,6 +34,7 @@ use FireflyIII\Support\JsonApi\Enrichments\AccountEnrichment;
 use FireflyIII\Transformers\AccountTransformer;
 use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use League\Fractal\Pagination\IlluminatePaginatorAdapter;
 use League\Fractal\Resource\Collection as FractalCollection;
@@ -47,6 +49,7 @@ final class ShowController extends Controller
 
     public const string RESOURCE_KEY = 'accounts';
 
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
     private AccountRepositoryInterface $repository;
 
     /**
@@ -55,9 +58,11 @@ final class ShowController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(function ($request, $next) {
+        $this->middleware(function (Request $request, $next) {
+            $userGroup        = $this->validateUserGroup($request);
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
+            $this->repository->setUserGroup($userGroup);
 
             return $next($request);
         });
@@ -98,6 +103,7 @@ final class ShowController extends Controller
         $enrichment->setStart($start);
         $enrichment->setEnd($end);
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $accounts    = $enrichment->enrich($accounts);
 
         // make paginator:
@@ -135,6 +141,7 @@ final class ShowController extends Controller
         $enrichment->setStart($start);
         $enrichment->setEnd($end);
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $account                                            = $enrichment->enrichSingle($account);
 
         /** @var AccountTransformer $transformer */

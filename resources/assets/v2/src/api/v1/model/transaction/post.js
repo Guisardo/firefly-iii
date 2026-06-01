@@ -21,8 +21,8 @@
 import {api} from "../../../../boot/axios";
 
 export default class Post {
-    post(submission) {
+    post(submission, params = {}) {
         let url = '/api/v1/transactions';
-        return api.post(url, submission);
+        return api.post(url, submission, {params: params});
     }
 }

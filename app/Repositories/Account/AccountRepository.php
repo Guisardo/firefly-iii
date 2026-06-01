@@ -36,6 +36,7 @@ use FireflyIII\Models\Location;
 use FireflyIII\Models\TransactionCurrency;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
+use FireflyIII\Models\UserGroup;
 use FireflyIII\Services\Internal\Destroy\AccountDestroyService;
 use FireflyIII\Services\Internal\Update\AccountUpdateService;
 use FireflyIII\Support\Facades\Amount;
@@ -56,11 +57,21 @@ use function Safe\json_encode;
  */
 class AccountRepository implements AccountRepositoryInterface, UserGroupInterface
 {
-    use UserGroupTrait;
+    use UserGroupTrait {
+        setUserGroup as private setUserGroupOnTrait;
+    }
+
+    private bool $useUserGroupScope = false;
 
     public function count(array $types): int
     {
-        return $this->user->accounts()->accountTypeIn($types)->count();
+        return $this->accounts()->accountTypeIn($types)->count();
+    }
+
+    public function setUserGroup(UserGroup $userGroup): void
+    {
+        $this->setUserGroupOnTrait($userGroup);
+        $this->useUserGroupScope = true;
     }
 
     /**
@@ -84,7 +95,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
         /** @var Account $account */
         foreach ($accounts as $account) {
-            $byName = $this->user->accounts()->where('name', $account->name)->where('id', '!=', $account->id)->first();
+            $byName = $this->accounts()->where('name', $account->name)->where('id', '!=', $account->id)->first();
             if (null !== $byName) {
                 $result->push($account);
                 $result->push($byName);
@@ -92,7 +103,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
                 continue;
             }
             if (null !== $account->iban) {
-                $byIban = $this->user->accounts()->where('iban', $account->iban)->where('id', '!=', $account->id)->first();
+                $byIban = $this->accounts()->where('iban', $account->iban)->where('id', '!=', $account->id)->first();
                 if (null !== $byIban) {
                     $result->push($account);
                     $result->push($byIban);
@@ -109,12 +120,12 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
     public function find(int $accountId): ?Account
     {
         /** @var null|Account */
-        return $this->user->accounts()->find($accountId);
+        return $this->accounts()->find($accountId);
     }
 
     public function findByAccountNumber(string $number, array $types): ?Account
     {
-        $dbQuery = $this->user
+        $dbQuery = $this
             ->accounts()
             ->leftJoin('account_meta', 'accounts.id', '=', 'account_meta.account_id')
             ->where('accounts.active', true)
@@ -137,7 +148,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
     public function findByIbanNull(string $iban, array $types): ?Account
     {
         $iban  = Steam::filterSpaces($iban);
-        $query = $this->user->accounts()->where('iban', '!=', '')->whereNotNull('iban');
+        $query = $this->accounts()->where('iban', '!=', '')->whereNotNull('iban');
 
         if (0 !== count($types)) {
             $query->leftJoin('account_types', 'accounts.account_type_id', '=', 'account_types.id');
@@ -150,7 +161,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function findByName(string $name, array $types): ?Account
     {
-        $query   = $this->user->accounts();
+        $query   = $this->accounts();
 
         if (0 !== count($types)) {
             $query->leftJoin('account_types', 'accounts.account_type_id', '=', 'account_types.id');
@@ -191,7 +202,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function getAccountsById(array $accountIds): Collection
     {
-        $query = $this->user->accounts();
+        $query = $this->accounts();
 
         if (0 !== count($accountIds)) {
             $query->whereIn('accounts.id', $accountIds);
@@ -211,7 +222,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
             AccountTypeEnum::LOAN->value,
             AccountTypeEnum::DEBT->value,
         ], $types);
-        $query   = $this->user->accounts();
+        $query   = $this->accounts();
         if (0 !== count($types)) {
             $query->accountTypeIn($types);
         }
@@ -251,7 +262,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function getActiveAccountsByType(array $types): Collection
     {
-        $query = $this->user
+        $query = $this
             ->accounts()
             ->with([
                 'accountmeta' => static function (HasMany $query): void {
@@ -298,6 +309,9 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
         /** @var AccountFactory $factory */
         $factory = app(AccountFactory::class);
         $factory->setUser($this->user);
+        if ($this->useUserGroupScope) {
+            $factory->setUserGroup($this->userGroup);
+        }
 
         return $factory->findOrCreate('Cash account', $type->type);
     }
@@ -315,7 +329,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function getInactiveAccountsByType(array $types): Collection
     {
-        $query = $this->user
+        $query = $this
             ->accounts()
             ->with(['accountmeta' => static function (HasMany $query): void {
                 $query->where('name', 'account_role');
@@ -435,7 +449,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
         $type     = AccountType::query()->where('type', AccountTypeEnum::RECONCILIATION->value)->first();
 
         /** @var null|Account $current */
-        $current  = $this->user->accounts()->where('account_type_id', $type->id)->where('name', $name)->first();
+        $current  = $this->accounts()->where('account_type_id', $type->id)->where('name', $name)->first();
 
         if (null !== $current) {
             return $current;
@@ -453,6 +467,9 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
         /** @var AccountFactory $factory */
         $factory  = app(AccountFactory::class);
         $factory->setUser($account->user);
+        if ($this->useUserGroupScope) {
+            $factory->setUserGroup($this->userGroup);
+        }
 
         return $factory->create($data);
     }
@@ -630,7 +647,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
             AccountTypeEnum::CREDITCARD->value,
             AccountTypeEnum::MORTGAGE->value,
         ];
-        $this->user
+        $this
             ->accounts()
             ->leftJoin('account_types', 'account_types.id', '=', 'accounts.account_type_id')
             ->whereNotIn('account_types.type', $all)
@@ -640,7 +657,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function searchAccount(string $query, array $types, int $limit): Collection
     {
-        $dbQuery = $this->user
+        $dbQuery = $this
             ->accounts()
             ->where('active', true)
             ->orderBy('accounts.order', 'ASC')
@@ -666,7 +683,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function searchAccountIncludingInactive(string $query, array $types, int $limit): Collection
     {
-        $dbQuery = $this->user
+        $dbQuery = $this
             ->accounts()
             ->orderBy('accounts.order', 'ASC')
             ->orderBy('accounts.account_type_id', 'ASC')
@@ -691,7 +708,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function searchAccountNr(string $query, array $types, int $limit): Collection
     {
-        $dbQuery = $this->user
+        $dbQuery = $this
             ->accounts()
             ->distinct()
             ->leftJoin('account_meta', 'accounts.id', '=', 'account_meta.account_id')
@@ -731,6 +748,9 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
         /** @var AccountFactory $factory */
         $factory = app(AccountFactory::class);
         $factory->setUser($this->user);
+        if ($this->useUserGroupScope) {
+            $factory->setUserGroup($this->userGroup);
+        }
 
         return $factory->create($data);
     }
@@ -742,7 +762,19 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
     {
         /** @var AccountUpdateService $service */
         $service = app(AccountUpdateService::class);
+        if ($this->useUserGroupScope) {
+            $service->setUserGroup($this->userGroup);
+        }
 
         return $service->update($account, $data);
+    }
+
+    private function accounts(): HasMany
+    {
+        if ($this->useUserGroupScope) {
+            return $this->userGroup->accounts();
+        }
+
+        return $this->user->accounts();
     }
 }

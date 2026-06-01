@@ -71,6 +71,8 @@
 </template>
 
 <script>
+import {scopedUrl} from "../../support/user-group-scope";
+
 export default {
   props: ['error', 'value', 'index'],
   name: "TransactionDescription",
@@ -90,7 +92,7 @@ export default {
   },
   methods: {
     aSyncFunction: function (query, done) {
-      axios.get(this.descriptionAutoCompleteURI + query)
+      axios.get(scopedUrl(this.descriptionAutoCompleteURI + query))
           .then(res => {
             done(res.data);
           })

@@ -26,11 +26,13 @@ namespace FireflyIII\Api\V1\Controllers\Models\Account;
 
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Models\Account\StoreRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\JsonApi\Enrichments\AccountEnrichment;
 use FireflyIII\Transformers\AccountTransformer;
 use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use League\Fractal\Resource\Item;
 
 /**
@@ -40,6 +42,7 @@ final class StoreController extends Controller
 {
     public const string RESOURCE_KEY = 'accounts';
 
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
     private AccountRepositoryInterface $repository;
 
     /**
@@ -48,9 +51,11 @@ final class StoreController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(function ($request, $next) {
+        $this->middleware(function (Request $request, $next) {
+            $userGroup        = $this->validateUserGroup($request);
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
+            $this->repository->setUserGroup($userGroup);
 
             return $next($request);
         });
@@ -75,10 +80,12 @@ final class StoreController extends Controller
         $enrichment  = new AccountEnrichment();
         $enrichment->setDate(null);
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $account     = $enrichment->enrichSingle($account);
 
         /** @var AccountTransformer $transformer */
         $transformer = app(AccountTransformer::class);
+        $transformer->setUserGroup($this->userGroup);
 
         $resource    = new Item($account, $transformer, self::RESOURCE_KEY);
 

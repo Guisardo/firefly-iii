@@ -25,6 +25,7 @@ namespace FireflyIII\Models;
 
 use FireflyIII\Enums\AccountTypeEnum;
 use FireflyIII\Handlers\Observer\DeletedAccountObserver;
+use FireflyIII\Support\Binder\ResolvesUserGroupForRouteBinding;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use FireflyIII\Support\Models\ReturnsIntegerUserIdTrait;
 use FireflyIII\User;
@@ -40,6 +41,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Routing\Route;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -64,13 +66,29 @@ class Account extends Model
      *
      * @throws NotFoundHttpException
      */
-    public static function routeBinder(self|string $value): self
+    public static function routeBinder(self|string $value, ?Route $route = null): self
     {
         if ($value instanceof self) {
             $value = (int) $value->id;
         }
         if (auth()->check()) {
             $accountId = (int) $value;
+            $userGroup = ResolvesUserGroupForRouteBinding::resolvedUserGroup($route);
+            if (null !== $userGroup) {
+                /** @var null|Account $account */
+                $account = self::query()
+                    ->with(['accountType'])
+                    ->where('id', $accountId)
+                    ->where('user_group_id', $userGroup->id)
+                    ->first()
+                ;
+                if (null !== $account) {
+                    return $account;
+                }
+            }
+            if (ResolvesUserGroupForRouteBinding::hasExplicitUserGroup($route)) {
+                throw new NotFoundHttpException();
+            }
 
             /** @var User $user */
             $user      = auth()->user();

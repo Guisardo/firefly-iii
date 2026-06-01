@@ -72,6 +72,8 @@
 </template>
 
 <script>
+import {scopedUrl} from "../../support/user-group-scope";
+
 export default {
   name: "Category",
   props: {
@@ -109,7 +111,7 @@ export default {
       return escapedName.replace(new RegExp(("" + inputValue), 'i'), '<b>$&</b>');
     },
     aSyncFunction: function (query, done) {
-      axios.get(this.categoryAutoCompleteURI + query)
+      axios.get(scopedUrl(this.categoryAutoCompleteURI + query))
           .then(res => {
             done(res.data);
           })

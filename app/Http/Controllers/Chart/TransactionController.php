@@ -31,6 +31,7 @@ use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Http\Controllers\Controller;
 use FireflyIII\Support\CacheProperties;
 use FireflyIII\Support\Http\Controllers\ResolvesJournalAmountAndCurrency;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -39,6 +40,7 @@ use Illuminate\Http\JsonResponse;
 final class TransactionController extends Controller
 {
     use ResolvesJournalAmountAndCurrency;
+    use UsesSharedAdministrationContext;
 
     /** @var GeneratorInterface Chart generation methods. */
     protected $generator;
@@ -61,6 +63,7 @@ final class TransactionController extends Controller
         $cache->addProperty($start);
         $cache->addProperty($end);
         $cache->addProperty($this->convertToPrimary);
+        $cache->addProperty($this->resolvedUserGroup()?->id ?? 0);
         $cache->addProperty('chart.transactions.budgets');
         if ($cache->has()) {
             return response()->json($cache->get());
@@ -68,6 +71,7 @@ final class TransactionController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
         $collector->setRange($start, $end);
         $collector->withBudgetInformation();
         $collector->setTypes([TransactionTypeEnum::WITHDRAWAL->value]);
@@ -104,6 +108,7 @@ final class TransactionController extends Controller
         $cache->addProperty($end);
         $cache->addProperty($objectType);
         $cache->addProperty($this->convertToPrimary);
+        $cache->addProperty($this->resolvedUserGroup()?->id ?? 0);
         $cache->addProperty('chart.transactions.categories');
         if ($cache->has()) {
             return response()->json($cache->get());
@@ -111,18 +116,10 @@ final class TransactionController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
         $collector->setRange($start, $end);
         $collector->withCategoryInformation();
-
-        if ('withdrawal' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::WITHDRAWAL->value]);
-        }
-        if ('deposit' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::DEPOSIT->value]);
-        }
-        if ('transfer' === $objectType || 'transfers' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::TRANSFER->value]);
-        }
+        $collector->setTypes($this->getTransactionTypes($objectType));
 
         $result    = $collector->getExtractedJournals();
         $data      = [];
@@ -156,6 +153,7 @@ final class TransactionController extends Controller
         $cache->addProperty($end);
         $cache->addProperty($objectType);
         $cache->addProperty($this->convertToPrimary);
+        $cache->addProperty($this->resolvedUserGroup()?->id ?? 0);
         $cache->addProperty('chart.transactions.destinations');
         if ($cache->has()) {
             return response()->json($cache->get());
@@ -163,18 +161,10 @@ final class TransactionController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
         $collector->setRange($start, $end);
         $collector->withAccountInformation();
-
-        if ('withdrawal' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::WITHDRAWAL->value]);
-        }
-        if ('deposit' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::DEPOSIT->value]);
-        }
-        if ('transfer' === $objectType || 'transfers' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::TRANSFER->value]);
-        }
+        $collector->setTypes($this->getTransactionTypes($objectType));
 
         $result    = $collector->getExtractedJournals();
         $data      = [];
@@ -208,6 +198,7 @@ final class TransactionController extends Controller
         $cache->addProperty($end);
         $cache->addProperty($objectType);
         $cache->addProperty($this->convertToPrimary);
+        $cache->addProperty($this->resolvedUserGroup()?->id ?? 0);
         $cache->addProperty('chart.transactions.sources');
         if ($cache->has()) {
             return response()->json($cache->get());
@@ -215,18 +206,10 @@ final class TransactionController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
         $collector->setRange($start, $end);
         $collector->withAccountInformation();
-
-        if ('withdrawal' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::WITHDRAWAL->value]);
-        }
-        if ('deposit' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::DEPOSIT->value]);
-        }
-        if ('transfer' === $objectType || 'transfers' === $objectType) {
-            $collector->setTypes([TransactionTypeEnum::TRANSFER->value]);
-        }
+        $collector->setTypes($this->getTransactionTypes($objectType));
 
         $result    = $collector->getExtractedJournals();
         $data      = [];
@@ -248,5 +231,13 @@ final class TransactionController extends Controller
         $cache->store($chart);
 
         return response()->json($chart);
+    }
+
+    private function getTransactionTypes(string $objectType): array
+    {
+        $types = config(sprintf('firefly.transactionTypesByType.%s', $objectType), []);
+        abort_if([] === $types, 404);
+
+        return $types;
     }
 }

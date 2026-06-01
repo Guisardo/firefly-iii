@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
 use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Journal\JournalAPIRepositoryInterface;
@@ -44,6 +45,7 @@ use League\Fractal\Resource\Collection as FractalCollection;
  */
 final class ListController extends Controller
 {
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
     private JournalAPIRepositoryInterface $journalAPIRepository;
 
     /**
@@ -55,9 +57,11 @@ final class ListController extends Controller
         $this->middleware(function ($request, $next) {
             /** @var User $admin */
             $admin                      = auth()->user();
+            $userGroup                  = $this->validateUserGroup($request);
 
             $this->journalAPIRepository = app(JournalAPIRepositoryInterface::class);
             $this->journalAPIRepository->setUser($admin);
+            $this->journalAPIRepository->setUserGroup($userGroup);
 
             return $next($request);
         });
@@ -113,6 +117,7 @@ final class ListController extends Controller
         $admin       = auth()->user();
         $enrichment  = new PiggyBankEventEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $events      = $enrichment->enrich($events);
 
         // make paginator:

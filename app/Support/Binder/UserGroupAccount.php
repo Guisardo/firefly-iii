@@ -24,33 +24,15 @@ declare(strict_types=1);
 namespace FireflyIII\Support\Binder;
 
 use FireflyIII\Models\Account;
-use FireflyIII\User;
 use Illuminate\Routing\Route;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Class UserGroupAccount.
  */
 class UserGroupAccount implements BinderInterface
 {
-    /**
-     * @throws NotFoundHttpException
-     */
     public static function routeBinder(string $value, Route $route): Account
     {
-        if (auth()->check()) {
-            /** @var User $user */
-            $user    = auth()->user();
-            $account = Account::query()
-                ->where('id', (int) $value)
-                ->where('user_group_id', $user->user_group_id)
-                ->first()
-            ;
-            if (null !== $account) {
-                return $account;
-            }
-        }
-
-        throw new NotFoundHttpException();
+        return Account::routeBinder($value, $route);
     }
 }

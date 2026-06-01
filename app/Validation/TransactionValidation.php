@@ -80,7 +80,7 @@ trait TransactionValidation
      *
      * @throws FireflyException
      */
-    public function validateAccountInformationUpdate(Validator $validator, TransactionGroup $transactionGroup): void
+    public function validateAccountInformationUpdate(Validator $validator, TransactionGroup $transactionGroup, ?UserGroup $userGroup = null): void
     {
         Log::debug('Now in validateAccountInformationUpdate()');
         if ($validator->errors()->count() > 0) {
@@ -99,7 +99,7 @@ trait TransactionValidation
             if (!is_int($index)) {
                 throw new FireflyException('Invalid data submitted: transaction is not array.');
             }
-            $this->validateSingleUpdate($validator, $index, $transaction, $transactionGroup);
+            $this->validateSingleUpdate($validator, $index, $transaction, $transactionGroup, $userGroup);
         }
     }
 
@@ -308,7 +308,7 @@ trait TransactionValidation
         $this->sanityCheckForeignCurrency($validator, $accountValidator, $transaction, $transactionType, $index);
     }
 
-    protected function validateSingleUpdate(Validator $validator, int $index, array $transaction, TransactionGroup $transactionGroup): void
+    protected function validateSingleUpdate(Validator $validator, int $index, array $transaction, TransactionGroup $transactionGroup, ?UserGroup $userGroup = null): void
     {
         Log::debug('Now validating single account update in validateSingleUpdate()');
 
@@ -327,6 +327,10 @@ trait TransactionValidation
         // create validator:
         /** @var AccountValidator $accountValidator */
         $accountValidator = app(AccountValidator::class);
+        if ($userGroup instanceof UserGroup) {
+            $accountValidator->setUser($transactionGroup->user);
+            $accountValidator->setUserGroup($userGroup);
+        }
 
         // 2025-01-29 grab the transaction type from the update array.
         $originalType     = $this->getTransactionType($transactionGroup, []);

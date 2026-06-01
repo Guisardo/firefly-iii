@@ -20,11 +20,12 @@
 
 
 import Get from "../../../api/v1/model/currency/get.js";
+import {scopedParams} from "../../shared/user-group-scope.js";
 
 export function loadCurrencies() {
-    let params = {
+    let params = scopedParams({
         page: 1, limit: 1337
-    };
+    });
     let getter = new Get();
     return getter.list(params).then((response) => {
         let returnData = {

@@ -1,3 +1,5 @@
+{% set userGroupId = userGroupId|default(0) %}
+{% set userGroupQuery = userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
 <div class="ml-1">
     {{ accounts.links('pagination.bootstrap-4')|raw }}
 </div>
@@ -40,7 +42,7 @@
                 <span class="fa fa-fw fa-bars object-handle"></span>
             </td>
             <td>
-                <a href="{{ route('accounts.show',account.id) }}">{{ account.name }}</a>
+                <a href="{{ route('accounts.show',account.id) }}{{ userGroupQuery }}">{{ account.name }}</a>
                 {% if account.location %}
                     <span class="fa fa-fw fa-map-marker"></span>
                 {% endif %}
@@ -132,8 +134,8 @@
                     <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                         {{ 'actions'|_ }} <span class="caret"></span></button>
                     <ul class="dropdown-menu dropdown-menu-right" role="menu">
-                        <li><a href="{{ route('accounts.edit',account.id) }}"><span class="fa fa-fw fa-pencil"></span> {{ 'edit'|_ }}</a></li>
-                        <li><a href="{{ route('accounts.delete',account.id) }}"><span class="fa fa-fw fa-trash"></span> {{ 'delete'|_ }}</a></li>
+                        <li><a href="{{ route('accounts.edit',account.id) }}{{ userGroupQuery }}"><span class="fa fa-fw fa-pencil"></span> {{ 'edit'|_ }}</a></li>
+                        <li><a href="{{ route('accounts.delete',account.id) }}{{ userGroupQuery }}"><span class="fa fa-fw fa-trash"></span> {{ 'delete'|_ }}</a></li>
                         {% if objectType == 'asset' %}
                         <li><a href="{{ route('accounts.reconcile',account.id) }}"><span class="fa fa-fw fa-check"></span> {{ 'reconcile_this_account'|_ }}</a></li>
                         {% endif %}

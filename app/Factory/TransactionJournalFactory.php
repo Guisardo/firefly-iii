@@ -184,6 +184,7 @@ class TransactionJournalFactory
         $this->categoryRepository->setUserGroup($userGroup);
         $this->piggyRepository->setUserGroup($userGroup);
         $this->accountRepository->setUserGroup($userGroup);
+        $this->accountValidator->setUserGroup($userGroup);
     }
 
     protected function storeMeta(TransactionJournal $journal, array $data, string $field): void
@@ -473,7 +474,7 @@ class TransactionJournalFactory
         $preference = $this->accountRepository->getAccountCurrency($account);
         if (null === $preference && !$currency instanceof TransactionCurrency) {
             // return user's default:
-            return Amount::getPrimaryCurrencyByUserGroup($this->user->userGroup);
+            return Amount::getPrimaryCurrencyByUserGroup($this->userGroup);
         }
         $result     = $preference ?? $currency;
         Log::debug(sprintf('Currency is now #%d (%s) because of account #%d (%s)', $result->id, $result->code, $account->id, $account->name));
@@ -627,6 +628,7 @@ class TransactionJournalFactory
         Log::debug(sprintf('Now in %s', __METHOD__));
         $transactionType  = $data['type'] ?? 'invalid';
         $this->accountValidator->setUser($this->user);
+        $this->accountValidator->setUserGroup($this->userGroup);
         $this->accountValidator->setTransactionType($transactionType);
 
         // validate source account.

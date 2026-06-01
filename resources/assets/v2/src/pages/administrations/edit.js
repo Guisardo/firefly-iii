@@ -20,10 +20,9 @@
 
 import '../../boot/bootstrap.js';
 import dates from "../shared/dates.js";
-import Post from "../../api/v1/model/user-group/post.js";
 import i18next from "i18next";
-import Get from "../../api/v1/model/user-group/get.js";
-import Put from "../../api/v1/model/user-group/put.js";
+import Get from "../../api/v2/model/user-group/get.js";
+import Put from "../../api/v2/model/user-group/put.js";
 
 
 let administrations = function () {
@@ -68,14 +67,14 @@ let administrations = function () {
                     this.notifications.success.show = true;
                     this.notifications.success.text = i18next.t('firefly.updated_administration', {title: response.data.data.attributes.title});
                     // TODO needs a better redirect.
-                    this.notifications.success.url = './administrations';
+                    this.notifications.success.url = '/administrations';
                 }
                 if (this.formStates.resetButton) {
                     this.title = '';
                 }
                 if (!this.formStates.returnHereButton) {
                     // TODO needs a better redirect.
-                    window.location.href = './administrations?user_group_id=' + parseInt(response.data.data.id) + '&message=updated';
+                    window.location.href = '/administrations?user_group_id=' + parseInt(response.data.data.id) + '&message=updated';
                 }
             }).catch(error => {
                 this.errors.title = error.response.data.errors.title;
@@ -83,7 +82,7 @@ let administrations = function () {
 
         },
         cancelForm() {
-            window.location.href = './administrations';
+            window.location.href = '/administrations';
         },
         init() {
             const page = window.location.href.split('/');

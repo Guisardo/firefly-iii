@@ -21,6 +21,7 @@
  */
 declare(strict_types=1);
 
+use FireflyIII\Support\Http\SharedAdministration\ResolveSharedAdministration;
 use Illuminate\Support\Facades\Route;
 
 use function Safe\define;
@@ -100,6 +101,25 @@ Route::group(
         Route::get('health', ['uses' => 'HealthcheckController@check', 'as' => 'healthcheck'])->withoutMiddleware(['web']);
     }
 );
+
+Route::get(
+    'v2/i18n/{language}.json',
+    static function (string $language) {
+        $translations = [];
+        $locale       = 'en_US';
+
+        foreach ((array) config('translations.json.v2', []) as $group => $keys) {
+            foreach ($keys as $key) {
+                $translations[$group][$key] = trans(sprintf('%s.%s', $group, $key), [], $locale);
+            }
+        }
+
+        return response()
+            ->json($translations)
+            ->header('Cache-Control', 'public, max-age=86400')
+        ;
+    }
+)->where('language', '[A-Za-z_-]+')->withoutMiddleware(['web']);
 
 // These routes only work when the user is NOT logged in.
 Route::group(
@@ -183,14 +203,17 @@ Route::group(
         Route::get('{objectType}', ['uses' => 'Account\IndexController@inactive', 'as' => 'inactive.index'])->where(
             'objectType',
             'revenue|asset|expense|liabilities'
-        );
+        )->middleware(ResolveSharedAdministration::class);
     }
 );
 Route::group(
     ['middleware' => 'user-full-auth', 'namespace' => 'FireflyIII\Http\Controllers', 'prefix' => 'accounts', 'as' => 'accounts.'],
     static function (): void {
         // show:
-        Route::get('{objectType}', ['uses' => 'Account\IndexController@index', 'as' => 'index'])->where('objectType', 'revenue|asset|expense|liabilities');
+        Route::get('{objectType}', ['uses' => 'Account\IndexController@index', 'as' => 'index'])
+            ->where('objectType', 'revenue|asset|expense|liabilities')
+            ->middleware(ResolveSharedAdministration::class)
+        ;
 
         // create
         Route::get('create/{objectType}', ['uses' => 'Account\CreateController@create', 'as' => 'create'])->where(
@@ -200,18 +223,29 @@ Route::group(
         Route::post('store', ['uses' => 'Account\CreateController@store', 'as' => 'store']);
 
         // edit
-        Route::get('edit/{account}', ['uses' => 'Account\EditController@edit', 'as' => 'edit']);
-        Route::post('update/{account}', ['uses' => 'Account\EditController@update', 'as' => 'update']);
+        Route::get('edit/{account}', ['uses' => 'Account\EditController@edit', 'as' => 'edit'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
+        Route::post('update/{account}', ['uses' => 'Account\EditController@update', 'as' => 'update'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
 
         // delete
-        Route::get('delete/{account}', ['uses' => 'Account\DeleteController@delete', 'as' => 'delete']);
-        Route::post('destroy/{account}', ['uses' => 'Account\DeleteController@destroy', 'as' => 'destroy']);
+        Route::get('delete/{account}', ['uses' => 'Account\DeleteController@delete', 'as' => 'delete'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
+        Route::post('destroy/{account}', ['uses' => 'Account\DeleteController@destroy', 'as' => 'destroy'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
 
         // show
-        Route::get('show/{account}/all', ['uses' => 'Account\ShowController@showAll', 'as' => 'show.all']);
+        Route::get('show/{account}/all', ['uses' => 'Account\ShowController@showAll', 'as' => 'show.all'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
         Route::get('show/{account?}/{start_date?}/{end_date?}', ['uses' => 'Account\ShowController@show', 'as' => 'show'])
             ->where(['start_date' => DATEFORMAT])
             ->where(['end_date' => DATEFORMAT])
+            ->middleware(ResolveSharedAdministration::class)
         ;
 
         // reconcile routes:
@@ -711,20 +745,24 @@ Route::group(
             ['start_date' => DATEFORMAT]
         )
             ->where(['end_date' => DATEFORMAT])
+            ->middleware(ResolveSharedAdministration::class)
         ;
         Route::get('budgets/{start_date}/{end_date}', ['uses' => 'TransactionController@budgets', 'as' => 'budgets'])->where(['start_date' => DATEFORMAT])
             ->where(['end_date' => DATEFORMAT])
+            ->middleware(ResolveSharedAdministration::class)
         ;
         Route::get(
             'destinationAccounts/{objectType}/{start_date}/{end_date}',
             ['uses' => 'TransactionController@destinationAccounts', 'as' => 'destinationAccounts']
         )->where(['start_date' => DATEFORMAT])
             ->where(['end_date' => DATEFORMAT])
+            ->middleware(ResolveSharedAdministration::class)
         ;
         Route::get('sourceAccounts/{objectType}/{start_date}/{end_date}', ['uses' => 'TransactionController@sourceAccounts', 'as' => 'sourceAccounts'])->where(
             ['start_date' => DATEFORMAT]
         )
             ->where(['end_date' => DATEFORMAT])
+            ->middleware(ResolveSharedAdministration::class)
         ;
     }
 );
@@ -1300,16 +1338,19 @@ Route::group(
         // TODO improve these routes
         Route::get('{objectType}/all', ['uses' => 'Transaction\IndexController@indexAll', 'as' => 'index.all'])->where(
             ['objectType' => 'withdrawal|deposit|transfers|transfer|all']
-        );
+        )->middleware(ResolveSharedAdministration::class);
 
         Route::get('{objectType}/{start_date?}/{end_date?}', ['uses' => 'Transaction\IndexController@index', 'as' => 'index'])->where(
             ['objectType' => 'withdrawal|deposit|transfers|transfer|all']
         )->where(['start_date' => DATEFORMAT])
             ->where(['end_date' => DATEFORMAT])
+            ->middleware(ResolveSharedAdministration::class)
         ;
 
         // create group:
-        Route::get('create/{objectType}', ['uses' => 'Transaction\CreateController@create', 'as' => 'create']);
+        Route::get('create/{objectType}', ['uses' => 'Transaction\CreateController@create', 'as' => 'create'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
         Route::post('store', ['uses' => 'Transaction\CreateController@store', 'as' => 'store']);
 
         // clone group
@@ -1326,7 +1367,9 @@ Route::group(
         // unreconcile
         Route::post('unreconcile/{tj}', ['uses' => 'Transaction\EditController@unreconcile', 'as' => 'unreconcile']);
 
-        Route::get('show/{transactionGroup?}', ['uses' => 'Transaction\ShowController@show', 'as' => 'show']);
+        Route::get('show/{transactionGroup?}', ['uses' => 'Transaction\ShowController@show', 'as' => 'show'])
+            ->middleware(ResolveSharedAdministration::class)
+        ;
         Route::get('debug/{transactionGroup}', ['uses' => 'Transaction\ShowController@debugShow', 'as' => 'debug']);
     }
 );

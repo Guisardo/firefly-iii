@@ -52,7 +52,7 @@ class TransactionGroupEnrichment implements EnrichmentInterface
     private array $locations       = [];
     private array $metaData        = [];
     private array $notes           = [];
-    private readonly TransactionCurrency $primaryCurrency;
+    private TransactionCurrency $primaryCurrency;
     private array $tags            = [];
 
     public function __construct()
@@ -96,7 +96,10 @@ class TransactionGroupEnrichment implements EnrichmentInterface
 
     public function setUser(User $user): void {}
 
-    public function setUserGroup(UserGroup $userGroup): void {}
+    public function setUserGroup(UserGroup $userGroup): void
+    {
+        $this->primaryCurrency = Amount::getPrimaryCurrencyByUserGroup($userGroup);
+    }
 
     private function appendCollectedData(): void
     {

@@ -30,6 +30,7 @@ use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Facades\Steam;
 use FireflyIII\Support\Http\Controllers\BasicDataSupport;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -44,6 +45,7 @@ use Psr\Container\NotFoundExceptionInterface;
 final class IndexController extends Controller
 {
     use BasicDataSupport;
+    use UsesSharedAdministrationContext;
 
     private AccountRepositoryInterface $repository;
 
@@ -77,6 +79,7 @@ final class IndexController extends Controller
         $subTitle                      = (string) trans(sprintf('firefly.%s_accounts_inactive', $objectType));
         $subTitleIcon                  = config(sprintf('firefly.subIconsByIdentifier.%s', $objectType));
         $types                         = config(sprintf('firefly.accountTypesByIdentifier.%s', $objectType));
+        $this->applyResolvedUserGroup($this->repository);
         $collection                    = $this->repository->getInactiveAccountsByType($types);
         $total                         = $collection->count();
         $page                          = 0 === (int) $request->get('page') ? 1 : (int) $request->get('page');
@@ -112,6 +115,7 @@ final class IndexController extends Controller
         // make paginator:
         $accounts                      = new LengthAwarePaginator($accounts, $total, $pageSize, $page);
         $accounts->setPath(route('accounts.inactive.index', [$objectType]));
+        $this->appendResolvedUserGroupQuery($accounts);
 
         return view('accounts.index', [
             'objectType'   => $objectType,
@@ -120,6 +124,7 @@ final class IndexController extends Controller
             'subTitle'     => $subTitle,
             'page'         => $page,
             'accounts'     => $accounts,
+            'userGroupId'  => $this->resolvedUserGroup()?->id,
         ]);
     }
 
@@ -137,6 +142,7 @@ final class IndexController extends Controller
         $subTitle                      = (string) trans(sprintf('firefly.%s_accounts', $objectType));
         $subTitleIcon                  = config(sprintf('firefly.subIconsByIdentifier.%s', $objectType));
         $types                         = config(sprintf('firefly.accountTypesByIdentifier.%s', $objectType));
+        $this->applyResolvedUserGroup($this->repository);
 
         $this->repository->resetAccountOrder();
 
@@ -191,6 +197,7 @@ final class IndexController extends Controller
         /** @var LengthAwarePaginator $accounts */
         $accounts                      = new LengthAwarePaginator($accounts, $total, $pageSize, $page);
         $accounts->setPath(route('accounts.index', [$objectType]));
+        $this->appendResolvedUserGroupQuery($accounts);
 
         Log::debug(sprintf('Count of accounts after LAP (1): %d', $accounts->count()));
         Log::debug(sprintf('Count of accounts after LAP (2): %d', $accounts->getCollection()->count()));
@@ -202,6 +209,7 @@ final class IndexController extends Controller
             'subTitle'      => $subTitle,
             'page'          => $page,
             'accounts'      => $accounts,
+            'userGroupId'   => $this->resolvedUserGroup()?->id,
         ]);
     }
 

@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace FireflyIII\Models;
 
 use FireflyIII\Handlers\Observer\DeletedTransactionGroupObserver;
+use FireflyIII\Support\Binder\ResolvesUserGroupForRouteBinding;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use FireflyIII\Support\Models\ReturnsIntegerUserIdTrait;
 use FireflyIII\User;
@@ -32,6 +33,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Routing\Route;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -55,7 +57,7 @@ class TransactionGroup extends Model
      *
      * @throws NotFoundHttpException
      */
-    public static function routeBinder(self|string $value): self
+    public static function routeBinder(self|string $value, ?Route $route = null): self
     {
         if ($value instanceof self) {
             $value = (int) $value->id;
@@ -63,6 +65,26 @@ class TransactionGroup extends Model
         Log::debug(sprintf('Now in %s("%s")', __METHOD__, $value));
         if (auth()->check()) {
             $groupId = (int) $value;
+            $userGroup = ResolvesUserGroupForRouteBinding::resolvedUserGroup($route);
+            if (null !== $userGroup) {
+                /** @var null|TransactionGroup $group */
+                $group = self::query()
+                    ->with(['transactionJournals', 'transactionJournals.transactions'])
+                    ->where('transaction_groups.id', $groupId)
+                    ->where('transaction_groups.user_group_id', $userGroup->id)
+                    ->first(['transaction_groups.*'])
+                ;
+                if (null !== $group) {
+                    Log::debug(sprintf('Found group #%d by resolved user group #%d.', $group->id, $userGroup->id));
+
+                    return $group;
+                }
+            }
+            if (ResolvesUserGroupForRouteBinding::hasExplicitUserGroup($route)) {
+                Log::debug('Found no group in explicit user group context.');
+
+                throw new NotFoundHttpException();
+            }
 
             /** @var User $user */
             $user    = auth()->user();

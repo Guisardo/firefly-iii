@@ -1,10 +1,11 @@
 <aside class="control-sidebar control-sidebar-dark">
+    {% set userGroupQuery = userGroupId is defined and userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
     <div class="tab-content">
         <div class="tab-panel active" id="control-sidebar-home-tab">
             <h3 class="control-sidebar-heading">{{ 'create_new_stuff'|_ }}</h3>
             <ul class='control-sidebar-menu'>
                 <li>
-                    <a href="{{ route('transactions.create', 'withdrawal') }}">
+                    <a href="{{ route('transactions.create', 'withdrawal') }}{{ userGroupQuery }}">
                         <span class="menu-icon fa fa-long-arrow-left bg-red"></span>
 
                         <div class="menu-info">
@@ -13,7 +14,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="{{ route('transactions.create', 'deposit') }}">
+                    <a href="{{ route('transactions.create', 'deposit') }}{{ userGroupQuery }}">
                         <span class="menu-icon fa fa-long-arrow-right bg-green"></span>
 
                         <div class="menu-info">
@@ -22,7 +23,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="{{ route('transactions.create', 'transfer') }}">
+                    <a href="{{ route('transactions.create', 'transfer') }}{{ userGroupQuery }}">
                         <span class="menu-icon fa fa-exchange bg-blue"></span>
 
                         <div class="menu-info">
@@ -31,7 +32,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="{{ route('accounts.create', 'asset') }}">
+                    <a href="{{ route('accounts.create', 'asset') }}{{ userGroupQuery }}">
                         <span class="menu-icon fa fa-money bg-maroon"></span>
 
                         <div class="menu-info">
@@ -40,7 +41,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="{{ route('accounts.create', 'expense') }}">
+                    <a href="{{ route('accounts.create', 'expense') }}{{ userGroupQuery }}">
                         <span class="menu-icon fa fa-shopping-cart bg-maroon"></span>
 
                         <div class="menu-info">
@@ -49,7 +50,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="{{ route('accounts.create', 'revenue') }}">
+                    <a href="{{ route('accounts.create', 'revenue') }}{{ userGroupQuery }}">
                         <span class="menu-icon fa fa-download bg-maroon"></span>
 
                         <div class="menu-info">
@@ -58,7 +59,7 @@
                     </a>
                 </li>
                 <li>
-                    <a href="{{ route('accounts.create', 'liabilities') }}">
+                    <a href="{{ route('accounts.create', 'liabilities') }}{{ userGroupQuery }}">
                         <span class="menu-icon fa fa-ticket bg-maroon"></span>
 
                         <div class="menu-info">

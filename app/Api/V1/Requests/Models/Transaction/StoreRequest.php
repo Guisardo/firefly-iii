@@ -24,8 +24,10 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Requests\Models\Transaction;
 
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Location;
 use FireflyIII\Rules\BelongsUser;
+use FireflyIII\Rules\BelongsUserGroup;
 use FireflyIII\Rules\IsBoolean;
 use FireflyIII\Rules\IsDateOrTime;
 use FireflyIII\Rules\IsValidPositiveAmount;
@@ -54,7 +56,7 @@ class StoreRequest extends FormRequest
     use GroupValidation;
     use TransactionValidation;
 
-    protected array $acceptedRoles = [];
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
 
     /**
      * Get all data. Is pretty complex because of all the ??-statements.
@@ -83,8 +85,11 @@ class StoreRequest extends FormRequest
         Log::debug('Collect rules of TransactionStoreRequest');
         $validProtocols = FireflyConfig::get('valid_url_protocols', config('firefly.valid_url_protocols'))->data;
         $locationRules  = Location::requestRules([]);
+        $belongsRule    = $this->ownershipRule();
 
         return [
+            'user_group_id'                        => ['nullable', 'integer', 'min:1'],
+
             // basic fields for group:
             'group_title'                          => ['min:1', 'max:1000', 'nullable'],
             'error_if_duplicate_hash'              => [new IsBoolean()],
@@ -115,28 +120,28 @@ class StoreRequest extends FormRequest
             'transactions.*.description'           => ['nullable', 'min:1', 'max:1000'],
 
             // source of transaction
-            'transactions.*.source_id'             => ['numeric', 'nullable', new BelongsUser()],
+            'transactions.*.source_id'             => ['numeric', 'nullable', $belongsRule],
             'transactions.*.source_name'           => ['min:1', 'max:255', 'nullable'],
             'transactions.*.source_iban'           => ['min:1', 'max:255', 'nullable', 'iban'],
             'transactions.*.source_number'         => ['min:1', 'max:255', 'nullable'],
             'transactions.*.source_bic'            => ['min:1', 'max:255', 'nullable', 'bic'],
 
             // destination of transaction
-            'transactions.*.destination_id'        => ['numeric', 'nullable', new BelongsUser()],
+            'transactions.*.destination_id'        => ['numeric', 'nullable', $belongsRule],
             'transactions.*.destination_name'      => ['min:1', 'max:255', 'nullable'],
             'transactions.*.destination_iban'      => ['min:1', 'max:255', 'nullable', 'iban'],
             'transactions.*.destination_number'    => ['min:1', 'max:255', 'nullable'],
             'transactions.*.destination_bic'       => ['min:1', 'max:255', 'nullable', 'bic'],
 
             // budget, category, bill and piggy
-            'transactions.*.budget_id'             => ['mustExist:budgets,id', new BelongsUser()],
-            'transactions.*.budget_name'           => ['min:1', 'max:255', 'nullable', new BelongsUser()],
-            'transactions.*.category_id'           => ['mustExist:categories,id', new BelongsUser(), 'nullable'],
+            'transactions.*.budget_id'             => ['mustExist:budgets,id', $belongsRule],
+            'transactions.*.budget_name'           => ['min:1', 'max:255', 'nullable', $belongsRule],
+            'transactions.*.category_id'           => ['mustExist:categories,id', $belongsRule, 'nullable'],
             'transactions.*.category_name'         => ['min:1', 'max:255', 'nullable'],
-            'transactions.*.bill_id'               => ['numeric', 'nullable', 'mustExist:bills,id', new BelongsUser()],
-            'transactions.*.bill_name'             => ['min:1', 'max:255', 'nullable', new BelongsUser()],
-            'transactions.*.piggy_bank_id'         => ['numeric', 'nullable', 'mustExist:piggy_banks,id', new BelongsUser()],
-            'transactions.*.piggy_bank_name'       => ['min:1', 'max:255', 'nullable', new BelongsUser()],
+            'transactions.*.bill_id'               => ['numeric', 'nullable', 'mustExist:bills,id', $belongsRule],
+            'transactions.*.bill_name'             => ['min:1', 'max:255', 'nullable', $belongsRule],
+            'transactions.*.piggy_bank_id'         => ['numeric', 'nullable', 'mustExist:piggy_banks,id', $belongsRule],
+            'transactions.*.piggy_bank_name'       => ['min:1', 'max:255', 'nullable', $belongsRule],
 
             // other interesting fields
             'transactions.*.reconciled'            => [new IsBoolean()],
@@ -195,7 +200,7 @@ class StoreRequest extends FormRequest
             $this->validateForeignCurrencyInformation($validator);
 
             // validate all account info
-            $this->validateAccountInformation($validator);
+            $this->validateAccountInformation($validator, auth()->user(), $this->getUserGroup());
 
             // validate source/destination is equal, depending on the transaction journal type.
             $this->validateEqualAccounts($validator);
@@ -306,5 +311,14 @@ class StoreRequest extends FormRequest
         }
 
         return $return;
+    }
+
+    private function ownershipRule(): BelongsUser|BelongsUserGroup
+    {
+        if (null !== $this->getUserGroup()) {
+            return new BelongsUserGroup($this->getUserGroup());
+        }
+
+        return new BelongsUser();
     }
 }

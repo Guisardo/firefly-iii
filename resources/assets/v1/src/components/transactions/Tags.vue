@@ -54,6 +54,7 @@
 <script>
 import axios from 'axios';
 import VueTagsInput from '@johmun/vue-tags-input';
+import {scopedUrl} from "../../support/user-group-scope";
 
 export default {
   name: "Tags",
@@ -97,7 +98,7 @@ export default {
 
       clearTimeout(this.debounce);
       this.debounce = setTimeout(() => {
-        axios.get(url).then(response => {
+        axios.get(scopedUrl(url)).then(response => {
           this.autocompleteItems = response.data.map(a => {
             return {text: a.tag};
           });

@@ -29,6 +29,7 @@ use FireflyIII\Events\Model\Account\CreatedNewAccount;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\AccountType;
+use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Services\Internal\Support\AccountServiceTrait;
 use FireflyIII\Services\Internal\Support\LocationServiceTrait;
@@ -53,6 +54,7 @@ class AccountFactory
     private array $canHaveOpeningBalance;
     private array $canHaveVirtual;
     private User $user;
+    private ?UserGroup $userGroup = null;
 
     /**
      * AccountFactory constructor.
@@ -96,7 +98,7 @@ class AccountFactory
         $type = AccountType::whereType($accountType)->first();
 
         /** @var null|Account */
-        return $this->user->accounts()->where('account_type_id', $type->id)->where('name', $accountName)->first();
+        return $this->accounts()->where('account_type_id', $type->id)->where('name', $accountName)->first();
     }
 
     /**
@@ -112,13 +114,13 @@ class AccountFactory
         }
 
         /** @var null|Account $return */
-        $return = $this->user->accounts->where('account_type_id', $type->id)->where('name', $accountName)->first();
+        $return = $this->accounts()->where('account_type_id', $type->id)->where('name', $accountName)->first();
 
         if (null === $return) {
             Log::debug('Found nothing. Will create a new one.');
             $return = $this->create([
                 'user_id'           => $this->user->id,
-                'user_group_id'     => $this->user->user_group_id,
+                'user_group_id'     => $this->userGroupId(),
                 'name'              => $accountName,
                 'account_type_id'   => $type->id,
                 'account_type_name' => null,
@@ -135,6 +137,12 @@ class AccountFactory
     {
         $this->user = $user;
         $this->accountRepository->setUser($user);
+    }
+
+    public function setUserGroup(UserGroup $userGroup): void
+    {
+        $this->userGroup = $userGroup;
+        $this->accountRepository->setUserGroup($userGroup);
     }
 
     /**
@@ -206,7 +214,7 @@ class AccountFactory
         $active         = array_key_exists('active', $data) ? $data['active'] : true;
         $databaseData   = [
             'user_id'         => $this->user->id,
-            'user_group_id'   => $this->user->user_group_id,
+            'user_group_id'   => $this->userGroupId(),
             'account_type_id' => $type->id,
             'name'            => $data['name'],
             'order'           => 25_000,
@@ -364,6 +372,27 @@ class AccountFactory
 
         $updateService = app(AccountUpdateService::class);
         $updateService->setUser($account->user);
+        if ($this->userGroup instanceof UserGroup) {
+            $updateService->setUserGroup($this->userGroup);
+        }
         $updateService->update($account, ['order' => $order]);
+    }
+
+    private function accounts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        if ($this->userGroup instanceof UserGroup) {
+            return $this->userGroup->accounts();
+        }
+
+        return $this->user->accounts();
+    }
+
+    private function userGroupId(): int
+    {
+        if ($this->userGroup instanceof UserGroup) {
+            return $this->userGroup->id;
+        }
+
+        return (int) $this->user->user_group_id;
     }
 }

@@ -1,0 +1,205 @@
+name: Shared access PR
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - feature/shared-administration-access
+      - feature/project-2-first-iteration
+      - feature/iteration-2-shared-admin
+  push:
+    branches:
+      - feature/shared-administration-access
+      - feature/project-2-first-iteration
+      - feature/iteration-2-shared-admin
+
+permissions:
+  contents: read
+
+env:
+  SHARED_ADMIN_IMAGE: guisardo/firefly-iii
+
+jobs:
+  php-validation:
+    name: PHP validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+          tools: composer:v2
+          extensions: bcmath, curl, fileinfo, iconv, intl, json, mbstring, openssl, pdo, pdo_sqlite, session, simplexml, tokenizer, xml, xmlwriter
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist --no-scripts
+
+      - name: Prepare Laravel test environment
+        run: |
+          cp .env.testing .env
+          touch database/database.sqlite
+          php artisan key:generate --force --no-interaction
+          php artisan passport:keys --force --no-interaction
+
+      - name: PHP lint
+        run: find app tests routes database config -name '*.php' -print0 | xargs -0 -n 1 php -l
+
+      - name: Focused shared-access tests
+        run: |
+          php vendor/bin/phpunit -c phpunit.xml --no-coverage \
+            --log-junit storage/logs/shared-admin-iteration-4-junit.xml \
+            tests/integration/Api/Models/Account/ShowControllerTest.php \
+            tests/integration/Api/Models/Account/SharedAdministrationListControllerTest.php \
+            tests/integration/Api/Models/Account/SharedAdministrationWriteControllerTest.php \
+            tests/integration/Api/Models/Transaction/ShowControllerTest.php \
+            tests/integration/Api/Models/Transaction/WriteScopeControllerTest.php \
+            tests/integration/Api/Models/Transaction/TransactionJournalScopeControllerTest.php \
+            tests/integration/Api/Models/UserGroup/UserGroupControllerTest.php \
+            tests/integration/Support/Http/SharedAdministration/AdministrationResolverTest.php \
+            tests/integration/Support/Http/SharedAdministration/ScopedRequestAuthorizationTest.php \
+            tests/integration/Support/Binder/RouteBinderUserGroupTest.php \
+            tests/integration/Api/SharedAdministration/MultiGroupRegressionTest.php \
+            tests/integration/Api/SharedAdministration/SharedAdministrationAuditTest.php
+
+      - name: Migration smoke
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
+        run: php artisan migrate --force --no-interaction
+
+      - name: Upload PHP validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-validation-logs
+          path: |
+            storage/logs
+            storage/logs/shared-admin-iteration-4-junit.xml
+            .phpunit.cache
+          if-no-files-found: ignore
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build v1 assets
+        working-directory: resources/assets/v1
+        run: npm run production
+
+      - name: Build v2 assets
+        working-directory: resources/assets/v2
+        run: npm run build
+
+  docker-smoke:
+    name: Docker smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify external Docker images are digest pinned
+        run: |
+          missing_pins="$(
+            awk '
+              /^FROM / && $2 !~ /@sha256:/ { print FNR ": " $0 }
+              /^COPY --from=/ && $3 == "/usr/bin/composer" && $0 !~ /--from=[^ ]+@sha256:/ { print FNR ": " $0 }
+            ' Dockerfile
+          )"
+          if [ -n "${missing_pins}" ]; then
+            printf 'External Docker image references must be pinned by digest:\n%s\n' "${missing_pins}"
+            exit 1
+          fi
+
+      - name: Build source image
+        run: |
+          docker build --pull \
+            --build-arg BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --build-arg VCS_REF="${{ github.sha }}" \
+            --tag "${SHARED_ADMIN_IMAGE}:shared-admin-${{ github.sha }}" \
+            .
+
+      - name: Start source image with SQLite
+        run: |
+          docker run --detach --name firefly-smoke \
+            --publish 8080:8080 \
+            --env APP_ENV=testing \
+            --env APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+            --env DB_CONNECTION=sqlite \
+            --env DB_DATABASE=/tmp/firefly.sqlite \
+            "${SHARED_ADMIN_IMAGE}:shared-admin-${{ github.sha }}" \
+            sh -c 'touch /tmp/firefly.sqlite && php artisan passport:keys --force --no-interaction && php artisan migrate --force --no-interaction && php artisan serve --host=0.0.0.0 --port=8080'
+
+      - name: Verify container healthcheck
+        run: |
+          for attempt in $(seq 1 40); do
+            status="$(docker inspect --format='{{.State.Health.Status}}' firefly-smoke)"
+            if [ "${status}" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "${status}" = "unhealthy" ]; then
+              docker logs firefly-smoke
+              exit 1
+            fi
+            sleep 3
+          done
+          docker inspect firefly-smoke
+          docker logs firefly-smoke
+          exit 1
+
+      - name: Verify health endpoint responds
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 5 http://127.0.0.1:8080/health >/tmp/firefly-smoke-response.txt; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs firefly-smoke
+          exit 1
+
+      - name: Collect Docker smoke logs
+        if: always()
+        run: |
+          mkdir -p storage/logs
+          docker logs firefly-smoke > storage/logs/docker-smoke.log 2>&1 || true
+
+      - name: Upload Docker smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-smoke
+          path: |
+            storage/logs/docker-smoke.log
+            /tmp/firefly-smoke-response.txt
+          if-no-files-found: ignore

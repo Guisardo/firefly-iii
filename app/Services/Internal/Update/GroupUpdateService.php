@@ -125,6 +125,7 @@ class GroupUpdateService
         /** @var TransactionJournalFactory $factory */
         $factory    = app(TransactionJournalFactory::class);
         $factory->setUser($transactionGroup->user);
+        $factory->setUserGroup($transactionGroup->userGroup);
 
         try {
             $collection = $factory->create($submission);

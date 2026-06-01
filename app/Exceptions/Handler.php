@@ -161,6 +161,10 @@ class Handler extends ExceptionHandler
             ], $errorCode);
         }
 
+        if ($e instanceof HttpException && $expectsJson) {
+            return response()->json(['message' => $e->getMessage(), 'exception' => 'HttpException'], $e->getStatusCode());
+        }
+
         if ($expectsJson) {
             $errorCode = 500;
             $errorCode = $e instanceof MethodNotAllowedHttpException ? 405 : $errorCode;

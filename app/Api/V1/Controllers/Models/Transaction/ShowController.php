@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
 use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
@@ -45,6 +46,18 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 final class ShowController extends Controller
 {
     use TransactionFilter;
+
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
+
+    public function __construct()
+    {
+        parent::__construct();
+        $this->middleware(function (Request $request, $next) {
+            $this->validateUserGroup($request);
+
+            return $next($request);
+        });
+    }
 
     /**
      * This endpoint is documented at:
@@ -69,6 +82,9 @@ final class ShowController extends Controller
         $collector    = app(GroupCollectorInterface::class);
         $collector
             ->setUser($admin)
+            ->setUserGroup($this->userGroup)
+        ;
+        $collector
             // all info needed for the API:
             ->withAPIInformation()
             // set page size:
@@ -87,6 +103,7 @@ final class ShowController extends Controller
         // enrich
         $enrichment   = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $transactions = $enrichment->enrich($paginator->getCollection());
 
         /** @var TransactionGroupTransformer $transformer */
@@ -117,6 +134,9 @@ final class ShowController extends Controller
         $collector     = app(GroupCollectorInterface::class);
         $collector
             ->setUser($admin)
+            ->setUserGroup($this->userGroup)
+        ;
+        $collector
             // filter on transaction group.
             ->setTransactionGroup($transactionGroup)
             // all info needed for the API:
@@ -131,6 +151,7 @@ final class ShowController extends Controller
         // enrich
         $enrichment    = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $selectedGroup = $enrichment->enrichSingle($selectedGroup);
 
         /** @var TransactionGroupTransformer $transformer */

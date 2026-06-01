@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
 use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
@@ -39,6 +40,8 @@ use Illuminate\Support\Facades\Log;
  */
 final class DestroyController extends Controller
 {
+    protected array $acceptedRoles = [UserRoleEnum::MANAGE_TRANSACTIONS];
+
     private TransactionGroupRepository $groupRepository;
     private JournalRepositoryInterface $repository;
 
@@ -51,12 +54,15 @@ final class DestroyController extends Controller
         $this->middleware(function ($request, $next) {
             /** @var User $admin */
             $admin                 = auth()->user();
+            $userGroup             = $this->validateUserGroup($request);
 
             $this->repository      = app(JournalRepositoryInterface::class);
             $this->repository->setUser($admin);
+            $this->repository->setUserGroup($userGroup);
 
             $this->groupRepository = app(TransactionGroupRepository::class);
             $this->groupRepository->setUser($admin);
+            $this->groupRepository->setUserGroup($userGroup);
 
             return $next($request);
         });
@@ -70,6 +76,10 @@ final class DestroyController extends Controller
      */
     public function destroy(TransactionGroup $transactionGroup): JsonResponse
     {
+        if ($transactionGroup->user_group_id !== $this->userGroup->id) {
+            abort(404);
+        }
+
         Log::debug(sprintf('Now in %s', __METHOD__));
         $this->groupRepository->destroy($transactionGroup);
         Preferences::mark();
@@ -85,6 +95,10 @@ final class DestroyController extends Controller
      */
     public function destroyJournal(TransactionJournal $transactionJournal): JsonResponse
     {
+        if ($transactionJournal->user_group_id !== $this->userGroup->id) {
+            abort(404);
+        }
+
         $this->repository->destroyJournal($transactionJournal);
         Preferences::mark();
 

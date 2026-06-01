@@ -238,6 +238,12 @@
         nonce="{{ JS_NONCE }}"></script>
 
 {# All kinds of variables. #}
+<script type="text/javascript" nonce="{{ JS_NONCE }}">
+    window.fireflyPageState = Object.assign({}, window.fireflyPageState || {}, {
+        userGroupId: {{ userGroupId|default(0) }}
+    });
+    window.userGroupId = {{ userGroupId|default(0) }};
+</script>
 <script
     src="{{ route('javascript.variables') }}?ext=.js&amp;v={{ FF_VERSION }}{% if account %}&amp;account={{ account.id }}{% endif %}"
     type="text/javascript" nonce="{{ JS_NONCE }}"></script>
@@ -248,7 +254,7 @@
 {# Vue scripts and components. Only loaded when needed #}
 {% if VUE_SCRIPT_NAME %}
     <script src="v1/js/app_vue.js?v={{ FF_BUILD_TIME }}" type="text/javascript" nonce="{{ JS_NONCE }}"></script>
-    <script src="v1/js/{{ VUE_SCRIPT_NAME }}.js?v={{ FF_BUILD_TIME }}" type="text/javascript"
+    <script src="v1/js/{{ VUE_SCRIPT_NAME }}.js?v={{ FF_BUILD_TIME }}{% if userGroupId is defined and userGroupId %}&amp;user_group_id={{ userGroupId }}{% endif %}" type="text/javascript"
             nonce="{{ JS_NONCE }}"></script>
 {% endif %}
 

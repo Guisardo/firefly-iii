@@ -1,3 +1,13 @@
+@php
+    $selectedUserGroupId = (int) ($userGroupId ?? request()->integer('user_group_id'));
+    $scopedRoute = static function (string $route, array $parameters = []) use ($selectedUserGroupId): string {
+        if ($selectedUserGroupId > 0) {
+            $parameters['user_group_id'] = $selectedUserGroupId;
+        }
+
+        return route($route, $parameters);
+    };
+@endphp
 <li class="nav-item">
     <a class="nav-link" href="{{ route(Route::current()->getName(), Route::current()->parameters()) }}?force_default_layout=true">
         <i class="fa-solid fa-landmark"></i>
@@ -58,26 +68,26 @@
     </a>
     <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end">
         <!-- withdrawal, deposit, transfer -->
-        <a href="{{ route('transactions.create', ['withdrawal']) }}" class="dropdown-item">
+        <a href="{{ $scopedRoute('transactions.create', ['withdrawal']) }}" class="dropdown-item">
             <em class="fa-solid fa-arrow-left fa-fw me-2"></em>
             {{ __('firefly.create_new_withdrawal') }}
         </a>
-        <a href="{{ route('transactions.create', ['deposit']) }}" class="dropdown-item">
+        <a href="{{ $scopedRoute('transactions.create', ['deposit']) }}" class="dropdown-item">
             <em class="fa-solid fa-arrow-right fa-fw me-2"></em>
             {{ __('firefly.create_new_deposit') }}
         </a>
-        <a href="{{ route('transactions.create', ['transfer']) }}" class="dropdown-item">
+        <a href="{{ $scopedRoute('transactions.create', ['transfer']) }}" class="dropdown-item">
             <em class="fa-solid fa-arrows-rotate fa-fw me-2"></em>
             {{ __('firefly.create_new_transfer') }}
         </a>
         <div class="dropdown-divider"></div>
 
         <!-- asset, liability -->
-        <a href="{{ route('accounts.create', ['asset']) }}" class="dropdown-item">
+        <a href="{{ $scopedRoute('accounts.create', ['asset']) }}" class="dropdown-item">
             <em class="fa-solid fa-money-bills fa-fw me-2"></em>
             {{ __('firefly.create_new_asset') }}
         </a>
-        <a href="{{ route('accounts.create', ['liabilities']) }}" class="dropdown-item">
+        <a href="{{ $scopedRoute('accounts.create', ['liabilities']) }}" class="dropdown-item">
             <em class="fa-solid fa-landmark fa-fw me-2"></em>
             {{ __('firefly.create_new_liabilities') }}
         </a>

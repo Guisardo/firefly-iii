@@ -74,7 +74,7 @@ class UserGroupRepository implements UserGroupRepositoryInterface, UserGroupInte
 
                 /** @var GroupMembership $first */
                 $first               = $user->groupMemberships()->where('user_group_id', '!=', $userGroup->id)->inRandomOrder()->first();
-                $user->user_group_id = $first->id;
+                $user->user_group_id = $first->user_group_id;
                 $user->save();
             }
             // delete membership so group is empty after this for-loop.
@@ -181,14 +181,14 @@ class UserGroupRepository implements UserGroupRepositoryInterface, UserGroupInte
 
         /** @var CurrencyRepositoryInterface $repository */
         $repository       = app(CurrencyRepositoryInterface::class);
+        $repository->setUser($this->user);
+        $repository->setUserGroup($userGroup);
 
         if (array_key_exists('primary_currency_code', $data)) {
-            $repository->setUser($this->user);
             $currency = $repository->findByCode($data['primary_currency_code']);
         }
 
         if (array_key_exists('primary_currency_id', $data) && null === $currency) {
-            $repository->setUser($this->user);
             $currency = $repository->find((int) $data['primary_currency_id']);
         }
         if (null !== $currency) {
@@ -205,7 +205,7 @@ class UserGroupRepository implements UserGroupRepositoryInterface, UserGroupInte
      */
     public function updateMembership(UserGroup $userGroup, array $data): UserGroup
     {
-        $owner           = UserRole::whereTitle(UserRoleEnum::OWNER)->first();
+        $owner           = UserRole::whereTitle(UserRoleEnum::OWNER->value)->first();
         Log::debug('in update membership');
 
         /** @var null|User $user */

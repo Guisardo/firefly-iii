@@ -27,6 +27,7 @@ namespace FireflyIII\Api\V1\Controllers\Models\Account;
 use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\Generic\PaginationDateRangeRequest;
 use FireflyIII\Api\V1\Requests\PaginationRequest;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
@@ -38,6 +39,7 @@ use FireflyIII\Transformers\PiggyBankTransformer;
 use FireflyIII\Transformers\TransactionGroupTransformer;
 use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use League\Fractal\Pagination\IlluminatePaginatorAdapter;
@@ -52,6 +54,7 @@ final class ListController extends Controller
 
     public const string RESOURCE_KEY = 'accounts';
 
+    protected array $acceptedRoles = [UserRoleEnum::READ_ONLY];
     private AccountRepositoryInterface $repository;
 
     /**
@@ -60,9 +63,11 @@ final class ListController extends Controller
     public function __construct()
     {
         parent::__construct();
-        $this->middleware(function ($request, $next) {
+        $this->middleware(function (Request $request, $next) {
+            $userGroup        = $this->validateUserGroup($request);
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
+            $this->repository->setUserGroup($userGroup);
 
             return $next($request);
         });
@@ -107,6 +112,7 @@ final class ListController extends Controller
         $admin                                                    = auth()->user();
         $enrichment                                               = new PiggyBankEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $piggyBanks                                               = $enrichment->enrich($piggyBanks);
 
         // make paginator:
@@ -138,7 +144,9 @@ final class ListController extends Controller
         // use new group collector:
         /** @var GroupCollectorInterface $collector */
         $collector                                                                              = app(GroupCollectorInterface::class);
-        $collector->setUser($admin)->setAccounts(new Collection()->push($account))->withAPIInformation()->setLimit($limit)->setPage($page)->setTypes($types);
+        $collector->setUser($admin);
+        $collector->setUserGroup($this->userGroup);
+        $collector->setAccounts(new Collection()->push($account))->withAPIInformation()->setLimit($limit)->setPage($page)->setTypes($types);
         if (null !== $start) {
             $collector->setStart($start);
         }
@@ -152,6 +160,7 @@ final class ListController extends Controller
         // enrich
         $enrichment                                                                             = new TransactionGroupEnrichment();
         $enrichment->setUser($admin);
+        $enrichment->setUserGroup($this->userGroup);
         $transactions                                                                           = $enrichment->enrich($paginator->getCollection());
 
         /** @var TransactionGroupTransformer $transformer */

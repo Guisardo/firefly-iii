@@ -19,6 +19,7 @@
  */
 
 import Autocomplete from "bootstrap5-autocomplete";
+import {scopedParams} from "../../shared/user-group-scope.js";
 
 export function getUrls() {
     return {
@@ -32,7 +33,7 @@ export function getUrls() {
 export function addAutocomplete(options) {
     const params = {
         server: options.serverUrl,
-        serverParams: {},
+        serverParams: scopedParams({}),
         fetchOptions: {
             headers: {
                 'X-CSRF-TOKEN': document.head.querySelector('meta[name="csrf-token"]').content

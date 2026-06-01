@@ -5,6 +5,8 @@
 {% endblock %}
 
 {% block content %}
+    {% set userGroupQuery = userGroupId is defined and userGroupId ? '?user_group_id=' ~ userGroupId : '' %}
+
     {% if accounts.count() > 0 %}
         <div class="row">
             <div class="col-lg-12 col-md-12 col-sm-12">
@@ -17,7 +19,7 @@
                             <div class="btn-group">
                                 <button class="btn btn-box-tool dropdown-toggle" data-toggle="dropdown"><span class="fa fa-ellipsis-v"></span></button>
                                 <ul class="dropdown-menu" role="menu">
-                                    <li><a href="{{ route('accounts.create', objectType) }}"><span
+                                    <li><a href="{{ route('accounts.create', objectType) }}{{ userGroupQuery }}"><span
                                                 class="fa fa-plus fa-fw"></span> {{ ('make_new_' ~ objectType ~ '_account')|_ }}
                                         </a></li>
                                 </ul>
@@ -28,19 +30,19 @@
                     </div>
                     <div class="box-body no-padding">
                         <div class="m-1">
-                            <a href="{{ route('accounts.create', objectType) }}" class="btn btn-success"><span class="fa fa-plus fa-fw"></span> {{ ('make_new_' ~ objectType ~ '_account')|_ }}</a>
+                            <a href="{{ route('accounts.create', objectType) }}{{ userGroupQuery }}" class="btn btn-success"><span class="fa fa-plus fa-fw"></span> {{ ('make_new_' ~ objectType ~ '_account')|_ }}</a>
                         </div>
                         {% include 'list.accounts' %}
                     </div>
                     <div class="box-footer">
                         <p>
-                            <a href="{{ route('accounts.create', objectType) }}" class="btn btn-success"><span
+                            <a href="{{ route('accounts.create', objectType) }}{{ userGroupQuery }}" class="btn btn-success"><span
                                     class="fa fa-plus fa-fw"></span> {{ ('make_new_' ~ objectType ~ '_account')|_ }}</a>
                         </p>
                         {% if inactiveCount > 0 %}
                             <p><small>
                                     <em>
-                                        <a href="{{ route('accounts.inactive.index', objectType) }}" class="text-muted">
+                                        <a href="{{ route('accounts.inactive.index', objectType) }}{{ userGroupQuery }}" class="text-muted">
                                             {{ trans_choice('firefly.inactive_account_link', inactiveCount) }}
                                         </a>
                                     </em>
@@ -51,7 +53,7 @@
                             <p><small class="text-muted">
                                     <em>
                                         {{ 'all_accounts_inactive'|_ }}
-                                        <a href="{{ route('accounts.index', objectType) }}">
+                                        <a href="{{ route('accounts.index', objectType) }}{{ userGroupQuery }}">
                                             {{ trans('firefly.active_account_link', {count: inactiveCount}) }}
                                         </a>
                                     </em>
@@ -64,12 +66,12 @@
         </div>
     {% endif %}
     {% if accounts.count() == 0 and page == 1 %}
-        {% include 'partials.empty' with {objectType: objectType, type: 'accounts',route: route('accounts.create', [objectType])} %}
+        {% include 'partials.empty' with {objectType: objectType, type: 'accounts',route: route('accounts.create', [objectType]) ~ userGroupQuery} %}
 
         {% if inactiveCount > 0 %}
             <p class="text-center"><small>
                     <em>
-                        <a href="{{ route('accounts.inactive.index', objectType) }}" class="text-muted">
+                        <a href="{{ route('accounts.inactive.index', objectType) }}{{ userGroupQuery }}" class="text-muted">
                             {{ trans_choice('firefly.inactive_account_link', inactiveCount) }}
                         </a>
                     </em>

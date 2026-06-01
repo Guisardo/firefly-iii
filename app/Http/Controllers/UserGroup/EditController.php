@@ -33,6 +33,8 @@ use Illuminate\Support\Facades\Log;
 
 final class EditController extends Controller
 {
+    use ResolvesAdministrationViews;
+
     /**
      * @return Application|Factory|\Illuminate\Contracts\Foundation\Application|View
      */
@@ -43,6 +45,6 @@ final class EditController extends Controller
         $mainTitleIcon = 'fa-book';
         Log::debug(sprintf('Now at %s', __METHOD__));
 
-        return view('administrations.edit', ['title' => $title, 'subTitle' => $subTitle, 'mainTitleIcon' => $mainTitleIcon]);
+        return $this->administrationView('administrations.edit', ['title' => $title, 'subTitle' => $subTitle, 'mainTitleIcon' => $mainTitleIcon]);
     }
 }

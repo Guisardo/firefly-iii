@@ -28,6 +28,7 @@ use FireflyIII\Api\V1\Controllers\Controller;
 use FireflyIII\Api\V1\Requests\PaginationRequest;
 use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
 use FireflyIII\Transformers\UserGroupTransformer;
+use FireflyIII\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -44,7 +45,10 @@ final class IndexController extends Controller
     {
         parent::__construct();
         $this->middleware(function ($request, $next) {
+            /** @var User $user */
+            $user             = auth()->user();
             $this->repository = app(UserGroupRepositoryInterface::class);
+            $this->repository->setUser($user);
 
             return $next($request);
         });

@@ -28,6 +28,7 @@ use Carbon\Carbon;
 use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\TransactionCurrency;
+use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Facades\Amount;
 
@@ -48,6 +49,11 @@ class AccountTransformer extends AbstractTransformer
         $this->repository       = app(AccountRepositoryInterface::class);
         $this->convertToPrimary = Amount::convertToPrimary();
         $this->primary          = Amount::getPrimaryCurrency();
+    }
+
+    public function setUserGroup(UserGroup $userGroup): void
+    {
+        $this->primary = Amount::getPrimaryCurrencyByUserGroup($userGroup);
     }
 
     /**

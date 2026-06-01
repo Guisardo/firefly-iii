@@ -30,6 +30,7 @@ use FireflyIII\Exceptions\FireflyException;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\AccountType;
 use FireflyIII\Models\Location;
+use FireflyIII\Models\UserGroup;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Services\Internal\Support\AccountServiceTrait;
 use FireflyIII\Support\Facades\Preferences;
@@ -51,6 +52,7 @@ class AccountUpdateService
     protected array $validFields;
     private array $canHaveOpeningBalance;
     private User $user;
+    private ?UserGroup $userGroup = null;
 
     /**
      * Constructor.
@@ -69,6 +71,11 @@ class AccountUpdateService
         $this->user = $user;
     }
 
+    public function setUserGroup(UserGroup $userGroup): void
+    {
+        $this->userGroup = $userGroup;
+    }
+
     /**
      * Update account data.
      *
@@ -78,6 +85,9 @@ class AccountUpdateService
     {
         Log::debug(sprintf('Now in %s', __METHOD__));
         $this->accountRepository->setUser($account->user);
+        if ($this->userGroup instanceof UserGroup) {
+            $this->accountRepository->setUserGroup($this->userGroup);
+        }
         $this->user                = $account->user;
         $oldData                   = $account->toArray();
         $oldData['account_number'] = $this->accountRepository->getMetaValue($account, 'account_number');
@@ -145,7 +155,7 @@ class AccountUpdateService
         }
 
         if ($newOrder > $oldOrder) {
-            $this->user
+            $this
                 ->accounts()
                 ->where('accounts.order', '<=', $newOrder)
                 ->where('accounts.order', '>', $oldOrder)
@@ -160,7 +170,7 @@ class AccountUpdateService
             return $account;
         }
 
-        $this->user
+        $this
             ->accounts()
             ->where('accounts.order', '>=', $newOrder)
             ->where('accounts.order', '<', $oldOrder)
@@ -323,5 +333,14 @@ class AccountUpdateService
         }
         Log::debug('Final new array is', $new);
         Preferences::setForUser($account->user, 'frontpageAccounts', $new);
+    }
+
+    private function accounts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        if ($this->userGroup instanceof UserGroup) {
+            return $this->userGroup->accounts();
+        }
+
+        return $this->user->accounts();
     }
 }
