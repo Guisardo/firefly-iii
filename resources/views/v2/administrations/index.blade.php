@@ -106,7 +106,7 @@
                                     <p class="mb-0 text-muted">You do not have permission to view or change membership.</p>
                                 </template>
                                 <div class="mt-3">
-                                    <div class="btn-group">
+                                    <div class="btn-group" x-show="group.canRead">
                                         <a class="btn btn-outline-primary btn-sm" :href="scopedUrl('{{ route('accounts.index', ['asset']) }}', group.id)">
                                             <em class="fa-solid fa-wallet"></em> Accounts
                                         </a>
@@ -179,7 +179,7 @@
                             <div class="card-footer">
                                 <div class="btn-group">
                                     <template x-if="false === group.in_use">
-                                    <button @click="useAdministration(group.id)" class="btn btn-primary">
+                                    <button @click="useAdministration(group.id)" class="btn btn-primary" :disabled="!group.canUse">
                                         <em class="fa-solid fa-coins"></em> Use
                                     </button>
                                     </template>

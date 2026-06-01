@@ -31,6 +31,20 @@ use ReflectionException;
 
 class RouteRoleResolver
 {
+    private const array WEB_READ_ROUTES = [
+        'accounts.index',
+        'accounts.inactive.index',
+        'accounts.show',
+        'accounts.show.all',
+        'transactions.index',
+        'transactions.index.all',
+        'transactions.show',
+        'chart.transactions.categories',
+        'chart.transactions.budgets',
+        'chart.transactions.destinationAccounts',
+        'chart.transactions.sourceAccounts',
+    ];
+
     public function acceptedRolesFor(Request $request): array
     {
         $route = $request->route();
@@ -41,6 +55,9 @@ class RouteRoleResolver
         $routeName = (string) $route->getName();
         if (str_starts_with($routeName, 'api.v1.user-groups.')) {
             return $this->userGroupRoles($request, $routeName);
+        }
+        if (in_array($routeName, self::WEB_READ_ROUTES, true)) {
+            return [UserRoleEnum::READ_ONLY];
         }
         if (str_starts_with($routeName, 'api.v1.accounts.')
             || str_starts_with($routeName, 'api.v1.transactions.')
@@ -107,7 +124,7 @@ class RouteRoleResolver
     private function userGroupRoles(Request $request, string $routeName): array
     {
         if (str_ends_with($routeName, '.use')) {
-            return [UserRoleEnum::READ_ONLY, UserRoleEnum::MANAGE_TRANSACTIONS];
+            return [UserRoleEnum::READ_ONLY, UserRoleEnum::MANAGE_TRANSACTIONS, UserRoleEnum::VIEW_MEMBERSHIPS];
         }
         if (str_ends_with($routeName, '.delete') || str_ends_with($routeName, '.destroy')) {
             return [UserRoleEnum::OWNER];

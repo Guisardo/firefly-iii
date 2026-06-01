@@ -24,9 +24,9 @@ import i18next from "i18next";
 import {format} from "date-fns";
 
 import '../../css/grid-ff3-theme.css';
-import Get from "../../api/v1/model/user-group/get.js";
-import Post from "../../api/v1/model/user-group/post.js";
-import Put from "../../api/v1/model/user-group/put.js";
+import Get from "../../api/v2/model/user-group/get.js";
+import Post from "../../api/v2/model/user-group/post.js";
+import Put from "../../api/v2/model/user-group/put.js";
 
 let index = function () {
     return {
@@ -64,6 +64,10 @@ let index = function () {
         },
         useAdministration(id) {
             let groupId = parseInt(id);
+            let group = this.userGroups.find((current) => current.id === groupId);
+            if (group && !group.canUse) {
+                return;
+            }
             // try to post "use", then reload administrations.
             (new Post()).use(groupId).then(response => {
                this.loadAdministrations();
@@ -77,7 +81,10 @@ let index = function () {
             }
         },
         scopedUrl(url, groupId) {
-            return url + '?user_group_id=' + parseInt(groupId);
+            const scoped = new URL(url, window.location.origin);
+            scoped.searchParams.set('user_group_id', parseInt(groupId));
+
+            return scoped.pathname + scoped.search + scoped.hash;
         },
         editMember(group, member) {
             this.membershipForms[group.id] = {
@@ -99,6 +106,11 @@ let index = function () {
         saveMembership(group) {
             let form = this.membershipForms[group.id];
             if (!form || (!form.id && '' === form.email)) {
+                return;
+            }
+            if (!Array.isArray(form.roles) || 0 === form.roles.length) {
+                this.notifications.error.show = true;
+                this.notifications.error.text = 'Select at least one role, or remove the member.';
                 return;
             }
 
@@ -139,13 +151,13 @@ let index = function () {
         },
         canUseRole(group, role) {
             if ('owner' === role) {
-                return group.isOwner;
+                return group.canManageOwnerRoles;
             }
 
             return group.canManageMembers;
         },
         canEditMember(group, member) {
-            return group.isOwner || !member.rawRoles.includes('owner');
+            return group.canManageOwnerRoles || !member.rawRoles.includes('owner');
         },
         roleLabel(role) {
             let translated = i18next.t('firefly.administration_role_' + role);
@@ -175,14 +187,26 @@ let index = function () {
                             id: parseInt(current.id),
                             title: current.attributes.title,
                             in_use: current.attributes.in_use,
+                            capabilities: current.attributes.capabilities ?? {},
+                            actorRoles: current.attributes.actor_roles ?? current.attributes.capabilities?.actor_roles ?? [],
                             owner: '',
                             you: '',
                             memberCountExceptYou: 0,
                             isOwner: false,
+                            canRead: false,
+                            canUse: false,
+                            canDelete: false,
                             canManageMembers: false,
+                            canManageOwnerRoles: false,
                             membersVisible: current.attributes.can_see_members,
                             members: [],
                         };
+                        group.canRead = true === group.capabilities.can_read;
+                        group.canUse = true === current.attributes.can_use || true === group.capabilities.can_use;
+                        group.canDelete = true === current.attributes.can_destroy || true === group.capabilities.can_delete;
+                        group.canManageMembers = true === current.attributes.can_manage_members || true === group.capabilities.can_manage_members;
+                        group.canManageOwnerRoles = true === current.attributes.can_manage_owner_roles || true === group.capabilities.can_manage_owner_roles;
+                        group.membersVisible = true === current.attributes.can_see_members || true === group.capabilities.can_view_members;
                         let memberships = {};
                         for (let j = 0; j < current.attributes.members.length; j++) {
                             let member = current.attributes.members[j];
@@ -194,7 +218,6 @@ let index = function () {
                                 group.isOwner = true;
                             }
                             if (true === member.you) {
-                                group.canManageMembers = roles.includes('owner') || roles.includes('full');
                                 group.you = i18next.t('firefly.administration_you', {role: roles.map((role) => this.roleLabel(role)).join(', ')});
                             }
                             if (false === member.you) {

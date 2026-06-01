@@ -20,7 +20,7 @@
 
 import '../../boot/bootstrap.js';
 import dates from "../shared/dates.js";
-import Post from "../../api/v1/model/user-group/post.js";
+import Post from "../../api/v2/model/user-group/post.js";
 import i18next from "i18next";
 
 
@@ -65,13 +65,13 @@ let administrations = function () {
                 if (this.formStates.returnHereButton) {
                     this.notifications.success.show = true;
                     this.notifications.success.text = i18next.t('firefly.new_administration_created', {title: response.data.data.attributes.title});
-                    this.notifications.success.url = './administrations';
+                    this.notifications.success.url = '/administrations';
                 }
                 if (this.formStates.resetButton) {
                     this.title = '';
                 }
                 if (!this.formStates.returnHereButton) {
-                    window.location.href = './administrations?user_group_id=' + parseInt(response.data.data.id) + '&message=created';
+                    window.location.href = '/administrations?user_group_id=' + parseInt(response.data.data.id) + '&message=created';
                 }
             }).catch(error => {
                 this.errors.title = error.response.data.errors.title;
@@ -79,7 +79,7 @@ let administrations = function () {
 
         },
         cancelForm() {
-            window.location.href = './administrations';
+            window.location.href = '/administrations';
         },
         init() {
 

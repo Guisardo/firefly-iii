@@ -1,8 +1,8 @@
 <?php
 
 /*
- * IndexController.php
- * Copyright (c) 2024 james@firefly-iii.org.
+ * ResolvesAdministrationViews.php
+ * Copyright (c) 2026 james@firefly-iii.org.
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
  *
@@ -24,28 +24,24 @@ declare(strict_types=1);
 
 namespace FireflyIII\Http\Controllers\UserGroup;
 
-use FireflyIII\Http\Controllers\Controller;
 use Illuminate\Contracts\View\Factory;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\View\View;
+use Illuminate\Contracts\View\View as ViewContract;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\View;
 
-final class IndexController extends Controller
+trait ResolvesAdministrationViews
 {
-    use ResolvesAdministrationViews;
-
     /**
-     * Show all administrations.
-     *
-     * @return Factory|View
+     * The shared administration UI is v2-only while the rest of the web app can still use v1.
      */
-    public function index(Request $request)
+    private function administrationView(string $view, array $data = []): Factory|ViewContract
     {
-        $title         = (string) trans('firefly.administrations_page_title');
-        $subTitle      = (string) trans('firefly.administrations_page_sub_title');
-        $mainTitleIcon = 'fa-book';
-        Log::debug(sprintf('Now at %s', __METHOD__));
+        Config::set('view.layout', 'v2');
+        View::getFinder()->setPaths([
+            realpath(base_path('resources/views/v2')),
+            realpath(base_path('resources/views')),
+        ]);
 
-        return $this->administrationView('administrations.index')->with(['title' => $title, 'subTitle' => $subTitle, 'mainTitleIcon' => $mainTitleIcon]);
+        return view($view, $data);
     }
 }

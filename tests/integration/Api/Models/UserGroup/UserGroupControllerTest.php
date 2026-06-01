@@ -36,8 +36,10 @@ use Tests\integration\Traits\CreatesMultiGroupFixtures;
  * @internal
  *
  * @covers \FireflyIII\Api\V1\Controllers\Models\UserGroup\DestroyController
+ * @covers \FireflyIII\Api\V1\Controllers\Models\UserGroup\IndexController
  * @covers \FireflyIII\Api\V1\Controllers\Models\UserGroup\StoreController
  * @covers \FireflyIII\Api\V1\Controllers\Models\UserGroup\UpdateController
+ * @covers \FireflyIII\Transformers\UserGroupTransformer
  */
 final class UserGroupControllerTest extends TestCase
 {
@@ -60,6 +62,56 @@ final class UserGroupControllerTest extends TestCase
             'user_group_id' => $userGroupId,
             'user_role_id'  => $this->userRoleId(UserRoleEnum::OWNER),
         ]);
+    }
+
+    public function testIndexReturnsCapabilitiesFromActualMembershipRoles(): void
+    {
+        $userGroup = UserGroup::create(['title' => 'Manage transactions capabilities']);
+        $user      = $this->createUserInGroup($userGroup, UserRoleEnum::MANAGE_TRANSACTIONS);
+        Passport::actingAs($user);
+
+        $response  = $this->getJson(route('api.v1.user-groups.index'));
+
+        $response->assertOk();
+        $response->assertJsonPath('data.0.attributes.actor_roles', [UserRoleEnum::MANAGE_TRANSACTIONS->value]);
+        $response->assertJsonPath('data.0.attributes.can_use', true);
+        $response->assertJsonPath('data.0.attributes.can_update', false);
+        $response->assertJsonPath('data.0.attributes.can_manage_members', false);
+        $response->assertJsonPath('data.0.attributes.can_manage_owner_roles', false);
+        $response->assertJsonPath('data.0.attributes.can_destroy', false);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_read', false);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_manage_transactions', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_manage_members', false);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_use', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_view_members', false);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_delete', false);
+        $response->assertJsonPath('data.0.attributes.members', []);
+    }
+
+    public function testOwnerCapabilitiesAllowAdministrationManagementAndMembers(): void
+    {
+        $userGroup = UserGroup::create(['title' => 'Owner capabilities']);
+        $owner     = $this->createUserInGroup($userGroup, UserRoleEnum::OWNER);
+        $member    = $this->createUserInGroup($userGroup, UserRoleEnum::READ_ONLY);
+        Passport::actingAs($owner);
+
+        $response  = $this->getJson(route('api.v1.user-groups.index'));
+
+        $response->assertOk();
+        $response->assertJsonPath('data.0.attributes.actor_roles', [UserRoleEnum::OWNER->value]);
+        $response->assertJsonPath('data.0.attributes.can_use', true);
+        $response->assertJsonPath('data.0.attributes.can_update', true);
+        $response->assertJsonPath('data.0.attributes.can_manage_members', true);
+        $response->assertJsonPath('data.0.attributes.can_manage_owner_roles', true);
+        $response->assertJsonPath('data.0.attributes.can_destroy', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_read', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_manage_transactions', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_manage_members', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_use', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_view_members', true);
+        $response->assertJsonPath('data.0.attributes.capabilities.can_delete', true);
+        $response->assertJsonFragment(['user_email' => $owner->email, 'roles' => [UserRoleEnum::OWNER->value]]);
+        $response->assertJsonFragment(['user_email' => $member->email, 'roles' => [UserRoleEnum::READ_ONLY->value]]);
     }
 
     public function testSwitchUsesRequestedAdministrationNotCurrentDefault(): void

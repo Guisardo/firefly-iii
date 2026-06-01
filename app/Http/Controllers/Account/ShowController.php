@@ -33,6 +33,7 @@ use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Debug\Timer;
 use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Support\Facades\Steam;
+use FireflyIII\Support\Http\Controllers\UsesSharedAdministrationContext;
 use FireflyIII\Support\Http\Controllers\PeriodOverview;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\RedirectResponse;
@@ -51,6 +52,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 final class ShowController extends Controller
 {
     use PeriodOverview;
+    use UsesSharedAdministrationContext;
 
     private AccountRepositoryInterface $repository;
 
@@ -92,6 +94,7 @@ final class ShowController extends Controller
         if (0 === $account->id) {
             throw new NotFoundHttpException();
         }
+        $this->applyResolvedUserGroup($this->repository);
         $objectType       = config(sprintf('firefly.shortNamesByFullName.%s', $account->accountType->type));
 
         if (!$this->isEditableAccount($account)) {
@@ -149,6 +152,7 @@ final class ShowController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector        = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
         $collector
             ->setAccounts(new Collection()->push($account))
             ->setLimit($pageSize)
@@ -165,6 +169,7 @@ final class ShowController extends Controller
         Log::debug('End collect transactions');
         $timer->stop('collection');
         $groups->setPath(route('accounts.show', [$account->id, $start->format('Y-m-d'), $end->format('Y-m-d')]));
+        $this->appendResolvedUserGroupQuery($groups);
         $showAll          = false;
         $now              = now();
         if ($now->gt($end) || $now->lt($start)) {
@@ -204,6 +209,7 @@ final class ShowController extends Controller
      */
     public function showAll(Request $request, Account $account): Factory|\Illuminate\Contracts\View\View|Redirector|RedirectResponse
     {
+        $this->applyResolvedUserGroup($this->repository);
         if (!$this->isEditableAccount($account)) {
             return $this->redirectAccountToAccount($account);
         }
@@ -226,6 +232,7 @@ final class ShowController extends Controller
 
         /** @var GroupCollectorInterface $collector */
         $collector    = app(GroupCollectorInterface::class);
+        $this->applyResolvedUserGroup($collector);
         $collector->setAccounts(new Collection()->push($account))->setLimit($pageSize)->setPage($page)->withAccountInformation()->withCategoryInformation();
 
         // this search will not include transaction groups where this asset account (or liability)
@@ -234,6 +241,7 @@ final class ShowController extends Controller
 
         $groups       = $collector->getPaginatedGroups();
         $groups->setPath(route('accounts.show.all', [$account->id]));
+        $this->appendResolvedUserGroupQuery($groups);
         $chartUrl     = route('chart.account.period', [$account->id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
         $showAll      = true;
         // correct

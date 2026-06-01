@@ -26,6 +26,8 @@ namespace FireflyIII\Support\Binder;
 
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationResolver;
+use FireflyIII\Support\Http\SharedAdministration\RouteRoleResolver;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use Throwable;
@@ -60,6 +62,11 @@ class ResolvesUserGroupForRouteBinding
         }
 
         $context = self::administrationContext();
+        if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
+            return $context->userGroup();
+        }
+
+        $context = self::resolveAdministrationContext();
         if ($context instanceof AdministrationContext && $context->hasResolvedAdministration()) {
             return $context->userGroup();
         }
@@ -108,6 +115,26 @@ class ResolvesUserGroupForRouteBinding
         } catch (Throwable) {
             return null;
         }
+    }
+
+    private static function resolveAdministrationContext(): ?AdministrationContext
+    {
+        $request = self::request();
+        if (!$request instanceof Request || !app()->bound(AdministrationResolver::class) || !app()->bound(RouteRoleResolver::class)) {
+            return null;
+        }
+
+        /** @var RouteRoleResolver $roleResolver */
+        $roleResolver = app(RouteRoleResolver::class);
+        $roles        = $roleResolver->acceptedRolesFor($request);
+        if ([] === $roles) {
+            return null;
+        }
+
+        /** @var AdministrationResolver $resolver */
+        $resolver     = app(AdministrationResolver::class);
+
+        return $resolver->resolve($request, $roles);
     }
 
     private static function routeParameter(?Route $route, string $parameter): mixed

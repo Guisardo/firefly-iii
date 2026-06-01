@@ -145,9 +145,25 @@ trait PeriodOverview
     {
         $return             = [
             'title'              => Navigation::periodShow($start, $period),
-            'route'              => route('transactions.index', [$type, $start->format('Y-m-d'), $end->format('Y-m-d')]),
+            'route'              => $this->transactionIndexRoute($type, $start, $end),
             'total_transactions' => 0,
         ];
+        if ('all' === $type) {
+            $allTypes = [
+                'withdrawal' => 'spent',
+                'deposit'    => 'earned',
+                'transfers'  => 'transferred',
+            ];
+            foreach ($allTypes as $transactionType => $setType) {
+                $this->transactions = [];
+                $set                = $this->getSingleGenericPeriodByType($start, $end, $transactionType);
+                $return['total_transactions'] += $set['count'];
+                $return[$setType]   = $set;
+            }
+
+            return $return;
+        }
+
         $setTypes           = [
             'withdrawal' => 'spent',
             'expenses'   => 'spent',
@@ -255,6 +271,9 @@ trait PeriodOverview
     protected function getTransactionPeriodOverview(string $transactionType, Carbon $start, Carbon $end): array
     {
         $this->periodStatisticRepo = app(PeriodStatisticRepositoryInterface::class);
+        if (method_exists($this, 'applyResolvedUserGroup')) {
+            $this->applyResolvedUserGroup($this->periodStatisticRepo);
+        }
         $range                     = Navigation::getViewRange(true);
         [$start, $end]             = $end < $start ? [$end, $start] : [$start, $end];
 
@@ -389,6 +408,9 @@ trait PeriodOverview
                 // get collection!
                 // collect all journals in this period (regardless of type)
                 $collector          = app(GroupCollectorInterface::class);
+                if (method_exists($this, 'applyResolvedUserGroup')) {
+                    $this->applyResolvedUserGroup($collector);
+                }
                 $collector->setTypes($types)->setRange($start, $end);
                 $this->transactions = $collector->getExtractedJournals();
                 Log::debug(sprintf('Going to group %d found journal(s)', count($types)));
@@ -418,6 +440,16 @@ trait PeriodOverview
         }
 
         return $grouped;
+    }
+
+    private function transactionIndexRoute(string $type, Carbon $start, Carbon $end): string
+    {
+        $parameters = [$type, $start->format('Y-m-d'), $end->format('Y-m-d')];
+        if (request()->has('user_group_id')) {
+            $parameters['user_group_id'] = request()->get('user_group_id');
+        }
+
+        return route('transactions.index', $parameters);
     }
 
     private function getSingleModelPeriodByType(Model $model, Carbon $start, Carbon $end, string $type): array

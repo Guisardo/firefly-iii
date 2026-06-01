@@ -28,6 +28,7 @@ use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\GroupMembership;
 use FireflyIII\Models\UserGroup;
 use FireflyIII\Support\Facades\Amount;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationRoleSet;
 use FireflyIII\User;
 use Illuminate\Support\Collection;
 
@@ -37,35 +38,16 @@ use Illuminate\Support\Collection;
 class UserGroupTransformer extends AbstractTransformer
 {
     private array $inUse              = [];
+    private array $capabilities       = [];
     private array $memberships        = [];
     private array $membershipsVisible = [];
 
     public function collectMetaData(Collection $objects): Collection
     {
         if (auth()->check()) {
-            // collect memberships so they can be listed in the group.
-            /** @var User $user */
-            $user = auth()->user();
-
             /** @var UserGroup $userGroup */
             foreach ($objects as $userGroup) {
-                $userGroupId                            = $userGroup->id;
-                $this->inUse[$userGroupId]              = $user->user_group_id === $userGroupId;
-                $access                                 = $user->hasRoleInGroupOrOwner($userGroup, UserRoleEnum::VIEW_MEMBERSHIPS) || $user->hasRole('owner');
-                $this->membershipsVisible[$userGroupId] = $access;
-                if ($access) {
-                    $groupMemberships = $userGroup->groupMemberships()->get();
-
-                    /** @var GroupMembership $groupMembership */
-                    foreach ($groupMemberships as $groupMembership) {
-                        $this->memberships[$userGroupId][] = [
-                            'user_id'    => (string) $groupMembership->user_id,
-                            'user_email' => $groupMembership->user->email,
-                            'role'       => $groupMembership->userRole->title,
-                            'you'        => $groupMembership->user_id === $user->id,
-                        ];
-                    }
-                }
+                $this->collectUserGroupMetaData($userGroup);
             }
             $this->mergeMemberships();
         }
@@ -79,6 +61,7 @@ class UserGroupTransformer extends AbstractTransformer
     public function transform(UserGroup $userGroup): array
     {
         $currency = Amount::getPrimaryCurrencyByUserGroup($userGroup);
+        $this->collectUserGroupMetaData($userGroup);
 
         return [
             'id'                              => $userGroup->id,
@@ -86,6 +69,13 @@ class UserGroupTransformer extends AbstractTransformer
             'updated_at'                      => $userGroup->updated_at->toAtomString(),
             'in_use'                          => $this->inUse[$userGroup->id] ?? false,
             'can_see_members'                 => $this->membershipsVisible[$userGroup->id] ?? false,
+            'actor_roles'                     => $this->capabilities[$userGroup->id]['actor_roles'] ?? [],
+            'can_use'                         => $this->capabilities[$userGroup->id]['can_use'] ?? false,
+            'can_update'                      => $this->capabilities[$userGroup->id]['can_update'] ?? false,
+            'can_manage_members'              => $this->capabilities[$userGroup->id]['can_manage_members'] ?? false,
+            'can_manage_owner_roles'          => $this->capabilities[$userGroup->id]['can_manage_owner_roles'] ?? false,
+            'can_destroy'                     => $this->capabilities[$userGroup->id]['can_destroy'] ?? false,
+            'capabilities'                    => $this->capabilities[$userGroup->id] ?? $this->emptyCapabilities(),
             'title'                           => $userGroup->title,
             'primary_currency_id'             => (string) $currency->id,
             'primary_currency_name'           => $currency->name,
@@ -98,6 +88,102 @@ class UserGroupTransformer extends AbstractTransformer
         // if the user has a specific role in this group, then collect the memberships.
     }
 
+    private function collectUserGroupMetaData(UserGroup $userGroup): void
+    {
+        $userGroupId = $userGroup->id;
+        if (array_key_exists($userGroupId, $this->capabilities)) {
+            return;
+        }
+
+        $this->inUse[$userGroupId]              = false;
+        $this->membershipsVisible[$userGroupId] = false;
+        $this->capabilities[$userGroupId]       = $this->emptyCapabilities();
+
+        if (!auth()->check()) {
+            return;
+        }
+
+        /** @var User $user */
+        $user                                   = auth()->user();
+        if (true === $user->blocked) {
+            return;
+        }
+
+        $this->inUse[$userGroupId]              = $user->user_group_id === $userGroupId;
+        $groupMemberships                       = GroupMembership::query()
+            ->where('user_group_id', $userGroupId)
+            ->with(['user', 'userRole'])
+            ->get()
+        ;
+        $currentUserRoles                       = [];
+
+        /** @var GroupMembership $groupMembership */
+        foreach ($groupMemberships as $groupMembership) {
+            if ($groupMembership->user_id === $user->id) {
+                $currentUserRoles[] = $groupMembership->userRole->title;
+            }
+        }
+
+        $canUse                                 = [] !== $currentUserRoles;
+        $canUpdate                              = $this->hasCapability($currentUserRoles, [UserRoleEnum::FULL]);
+        $canManageOwnerRoles                    = $this->hasCapability($currentUserRoles, [UserRoleEnum::OWNER]);
+        $canViewMembers                         = $this->hasCapability($currentUserRoles, [UserRoleEnum::VIEW_MEMBERSHIPS]);
+
+        $this->capabilities[$userGroupId]       = [
+            'actor_roles'               => array_values(array_unique($currentUserRoles)),
+            'can_use'                   => $canUse,
+            'can_update'                => $canUpdate,
+            'can_manage_members'        => $canUpdate,
+            'can_manage_owner_roles'    => $canManageOwnerRoles,
+            'can_destroy'               => $canManageOwnerRoles,
+            'can_read'                  => $this->hasCapability($currentUserRoles, [UserRoleEnum::READ_ONLY]),
+            'can_manage_transactions'   => $this->hasCapability($currentUserRoles, [UserRoleEnum::MANAGE_TRANSACTIONS]),
+            'can_manage_administration' => $canUpdate,
+            'can_view_members'          => $canViewMembers,
+            'can_delete'                => $canManageOwnerRoles,
+        ];
+        $this->membershipsVisible[$userGroupId] = $this->capabilities[$userGroupId]['can_view_members'];
+        if (!$this->membershipsVisible[$userGroupId]) {
+            return;
+        }
+
+        /** @var GroupMembership $groupMembership */
+        foreach ($groupMemberships as $groupMembership) {
+            $mail                                      = $groupMembership->user->email;
+            $this->memberships[$userGroupId][$mail] ??= [
+                'user_id'    => (string) $groupMembership->user_id,
+                'user_email' => $mail,
+                'you'        => $groupMembership->user_id === $user->id,
+                'roles'      => [],
+            ];
+            $this->memberships[$userGroupId][$mail]['roles'][] = $groupMembership->userRole->title;
+        }
+    }
+
+    private function emptyCapabilities(): array
+    {
+        return [
+            'actor_roles'               => [],
+            'can_use'                   => false,
+            'can_update'                => false,
+            'can_manage_members'        => false,
+            'can_manage_owner_roles'    => false,
+            'can_destroy'               => false,
+            'can_read'                  => false,
+            'can_manage_transactions'   => false,
+            'can_manage_administration' => false,
+            'can_view_members'          => false,
+            'can_delete'                => false,
+        ];
+    }
+
+    private function hasCapability(array $roleTitles, array $acceptedRoles): bool
+    {
+        $allowedRoleTitles = AdministrationRoleSet::allowedTitles($acceptedRoles);
+
+        return [] !== array_intersect($roleTitles, $allowedRoleTitles);
+    }
+
     private function mergeMemberships(): void
     {
         $new               = [];
@@ -105,6 +191,12 @@ class UserGroupTransformer extends AbstractTransformer
             $new[$groupId] ??= [];
 
             foreach ($members as $member) {
+                if (array_key_exists('roles', $member)) {
+                    $new[$groupId][$member['user_email']] = $member;
+
+                    continue;
+                }
+
                 $mail                            = $member['user_email'];
                 $new[$groupId][$mail] ??= [
                     'user_id'    => (string) $member['user_id'],
