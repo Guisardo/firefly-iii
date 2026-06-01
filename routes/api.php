@@ -350,13 +350,12 @@ Route::group(
     ],
     static function (): void {
         Route::get('', ['uses' => 'IndexController@index', 'as' => 'index']);
+        Route::post('', ['uses' => 'StoreController@store', 'as' => 'store']);
         Route::get('{userGroup}', ['uses' => 'ShowController@show', 'as' => 'show']);
         Route::put('{userGroup}', ['uses' => 'UpdateController@update', 'as' => 'update']);
-        // Route::post('', ['uses' => 'StoreController@store', 'as' => 'store']);
-        //        Route::put('{userGroup}', ['uses' => 'UpdateController@update', 'as' => 'update']);
-        //        Route::post('{userGroup}/use', ['uses' => 'UpdateController@useUserGroup', 'as' => 'use']);
-        //        Route::put('{userGroup}/update-membership', ['uses' => 'UpdateController@updateMembership', 'as' => 'updateMembership']);
-        //        Route::delete('{userGroup}', ['uses' => 'DestroyController@destroy', 'as' => 'destroy']);
+        Route::post('{userGroup}/use', ['uses' => 'UpdateController@useUserGroup', 'as' => 'use']);
+        Route::put('{userGroup}/update-membership', ['uses' => 'UpdateController@updateMembership', 'as' => 'updateMembership']);
+        Route::delete('{userGroup}', ['uses' => 'DestroyController@destroy', 'as' => 'destroy']);
     }
 );
 

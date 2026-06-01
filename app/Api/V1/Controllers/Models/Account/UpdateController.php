@@ -29,6 +29,7 @@ use FireflyIII\Api\V1\Requests\Models\Account\UpdateRequest;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Facades\Preferences;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\JsonApi\Enrichments\AccountEnrichment;
 use FireflyIII\Transformers\AccountTransformer;
 use FireflyIII\User;
@@ -54,6 +55,10 @@ final class UpdateController extends Controller
         $this->middleware(function ($request, $next) {
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
+            $context = app(AdministrationContext::class);
+            if ($context->hasResolvedAdministration()) {
+                $this->repository->setUserGroup($context->userGroup());
+            }
 
             return $next($request);
         });
@@ -81,6 +86,10 @@ final class UpdateController extends Controller
         $enrichment   = new AccountEnrichment();
         $enrichment->setDate(null);
         $enrichment->setUser($admin);
+        $context      = app(AdministrationContext::class);
+        if ($context->hasResolvedAdministration()) {
+            $enrichment->setUserGroup($context->userGroup());
+        }
         $account      = $enrichment->enrichSingle($account);
 
         /** @var AccountTransformer $transformer */

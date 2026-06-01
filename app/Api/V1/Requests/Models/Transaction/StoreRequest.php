@@ -24,8 +24,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Requests\Models\Transaction;
 
+use FireflyIII\Api\V1\Requests\Models\Concerns\ValidatesSelectedUserGroup;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Location;
-use FireflyIII\Rules\BelongsUser;
 use FireflyIII\Rules\IsBoolean;
 use FireflyIII\Rules\IsDateOrTime;
 use FireflyIII\Rules\IsValidPositiveAmount;
@@ -48,13 +49,25 @@ use Illuminate\Support\Facades\Log;
 class StoreRequest extends FormRequest
 {
     use AppendsLocationData;
-    use ChecksLogin;
+    use ChecksLogin {
+        authorize as authorizeLoggedIn;
+    }
     use ConvertsDataTypes;
     use CurrencyValidation;
     use GroupValidation;
     use TransactionValidation;
+    use ValidatesSelectedUserGroup;
 
     protected array $acceptedRoles = [];
+
+    public function authorize(): bool
+    {
+        if (!$this->authorizeLoggedIn()) {
+            return false;
+        }
+
+        return $this->authorizeSelectedUserGroup([UserRoleEnum::MANAGE_TRANSACTIONS]);
+    }
 
     /**
      * Get all data. Is pretty complex because of all the ??-statements.
@@ -86,6 +99,7 @@ class StoreRequest extends FormRequest
 
         return [
             // basic fields for group:
+            'user_group_id'                        => $this->userGroupIdRule(),
             'group_title'                          => ['min:1', 'max:1000', 'nullable'],
             'error_if_duplicate_hash'              => [new IsBoolean()],
             'fire_webhooks'                        => [new IsBoolean()],
@@ -115,28 +129,28 @@ class StoreRequest extends FormRequest
             'transactions.*.description'           => ['nullable', 'min:1', 'max:1000'],
 
             // source of transaction
-            'transactions.*.source_id'             => ['numeric', 'nullable', new BelongsUser()],
+            'transactions.*.source_id'             => ['numeric', 'nullable', $this->belongsUserOrSelectedUserGroup()],
             'transactions.*.source_name'           => ['min:1', 'max:255', 'nullable'],
             'transactions.*.source_iban'           => ['min:1', 'max:255', 'nullable', 'iban'],
             'transactions.*.source_number'         => ['min:1', 'max:255', 'nullable'],
             'transactions.*.source_bic'            => ['min:1', 'max:255', 'nullable', 'bic'],
 
             // destination of transaction
-            'transactions.*.destination_id'        => ['numeric', 'nullable', new BelongsUser()],
+            'transactions.*.destination_id'        => ['numeric', 'nullable', $this->belongsUserOrSelectedUserGroup()],
             'transactions.*.destination_name'      => ['min:1', 'max:255', 'nullable'],
             'transactions.*.destination_iban'      => ['min:1', 'max:255', 'nullable', 'iban'],
             'transactions.*.destination_number'    => ['min:1', 'max:255', 'nullable'],
             'transactions.*.destination_bic'       => ['min:1', 'max:255', 'nullable', 'bic'],
 
             // budget, category, bill and piggy
-            'transactions.*.budget_id'             => ['mustExist:budgets,id', new BelongsUser()],
-            'transactions.*.budget_name'           => ['min:1', 'max:255', 'nullable', new BelongsUser()],
-            'transactions.*.category_id'           => ['mustExist:categories,id', new BelongsUser(), 'nullable'],
+            'transactions.*.budget_id'             => ['mustExist:budgets,id', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.budget_name'           => ['min:1', 'max:255', 'nullable', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.category_id'           => ['mustExist:categories,id', $this->belongsUserOrSelectedUserGroup(), 'nullable'],
             'transactions.*.category_name'         => ['min:1', 'max:255', 'nullable'],
-            'transactions.*.bill_id'               => ['numeric', 'nullable', 'mustExist:bills,id', new BelongsUser()],
-            'transactions.*.bill_name'             => ['min:1', 'max:255', 'nullable', new BelongsUser()],
-            'transactions.*.piggy_bank_id'         => ['numeric', 'nullable', 'mustExist:piggy_banks,id', new BelongsUser()],
-            'transactions.*.piggy_bank_name'       => ['min:1', 'max:255', 'nullable', new BelongsUser()],
+            'transactions.*.bill_id'               => ['numeric', 'nullable', 'mustExist:bills,id', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.bill_name'             => ['min:1', 'max:255', 'nullable', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.piggy_bank_id'         => ['numeric', 'nullable', 'mustExist:piggy_banks,id', $this->belongsUserOrSelectedUserGroup()],
+            'transactions.*.piggy_bank_name'       => ['min:1', 'max:255', 'nullable', $this->belongsUserOrSelectedUserGroup()],
 
             // other interesting fields
             'transactions.*.reconciled'            => [new IsBoolean()],

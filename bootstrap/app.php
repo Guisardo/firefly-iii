@@ -35,6 +35,7 @@ use FireflyIII\Http\Middleware\RedirectIfAuthenticated;
 use FireflyIII\Http\Middleware\SecureHeaders;
 use FireflyIII\Http\Middleware\StartFireflyIIISession;
 use FireflyIII\Http\Middleware\VerifyCsrfToken;
+use FireflyIII\Support\Http\SharedAdministration\ResolveSharedAdministration;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Application;
@@ -111,6 +112,7 @@ $app = Application::configure(basePath: dirname(__DIR__))
                                              AcceptHeaders::class,
                                              // EnsureFrontendRequestsAreStateful::class,
                                              'auth:api',
+                                             ResolveSharedAdministration::class,
                                              Binder::class,
                           ]
                       );

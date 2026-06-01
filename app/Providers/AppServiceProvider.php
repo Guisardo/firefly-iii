@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace FireflyIII\Providers;
 
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Route;
@@ -87,6 +88,7 @@ class AppServiceProvider extends ServiceProvider
     #[Override]
     public function register(): void
     {
+        $this->app->scoped(AdministrationContext::class);
         // Passport::ignoreRoutes();
         //        Passport::ignoreMigrations();
         //        Sanctum::ignoreMigrations();

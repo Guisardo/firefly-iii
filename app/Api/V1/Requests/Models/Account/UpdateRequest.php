@@ -24,12 +24,12 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Requests\Models\Account;
 
+use FireflyIII\Api\V1\Requests\Models\Concerns\ValidatesSelectedUserGroup;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\Models\Location;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Rules\IsBoolean;
-use FireflyIII\Rules\UniqueAccountNumber;
-use FireflyIII\Rules\UniqueIban;
 use FireflyIII\Support\Request\AppendsLocationData;
 use FireflyIII\Support\Request\ChecksLogin;
 use FireflyIII\Support\Request\ConvertsDataTypes;
@@ -43,10 +43,30 @@ use Illuminate\Support\Facades\Log;
 class UpdateRequest extends FormRequest
 {
     use AppendsLocationData;
-    use ChecksLogin;
+    use ChecksLogin {
+        authorize as authorizeLoggedIn;
+    }
     use ConvertsDataTypes;
+    use ValidatesSelectedUserGroup;
 
     protected array $acceptedRoles = [];
+
+    public function authorize(): bool
+    {
+        if (!$this->authorizeLoggedIn()) {
+            return false;
+        }
+        if (!$this->authorizeSelectedUserGroup([UserRoleEnum::MANAGE_TRANSACTIONS])) {
+            return false;
+        }
+        if (null === $this->selectedUserGroupId()) {
+            return true;
+        }
+
+        $account = $this->route()?->parameter('account');
+
+        return $account instanceof Account && (int) $account->user_group_id === $this->selectedUserGroupId();
+    }
 
     public function getUpdateData(): array
     {
@@ -90,13 +110,18 @@ class UpdateRequest extends FormRequest
         $accountRoles   = implode(',', config('firefly.accountRoles'));
         $types          = implode(',', array_keys(config('firefly.subTitlesByIdentifier')));
         $ccPaymentTypes = implode(',', array_keys(config('firefly.ccTypes')));
+        $type           = $this->convertString('type');
+        if ('' === $type) {
+            $type = (string) config('firefly.shortNamesByFullName.'.$account->accountType->type);
+        }
 
         $rules          = [
-            'name'                 => sprintf('min:1|max:1024|uniqueAccountForUser:%d', $account->id),
+            'user_group_id'        => $this->userGroupIdRule(),
+            'name'                 => ['min:1', 'max:1024', $this->uniqueAccountNameForUserOrSelectedGroup($account, $type)],
             'type'                 => sprintf('in:%s', $types),
-            'iban'                 => ['iban', 'nullable', new UniqueIban($account, $this->convertString('type'))],
+            'iban'                 => ['iban', 'nullable', $this->uniqueIbanForUserOrSelectedGroup($account, $type)],
             'bic'                  => ['bic', 'nullable'],
-            'account_number'       => ['min:1', 'max:255', 'nullable', new UniqueAccountNumber($account, $this->convertString('type'))],
+            'account_number'       => ['min:1', 'max:255', 'nullable', $this->uniqueAccountNumberForUserOrSelectedGroup($account, $type)],
             'opening_balance'      => ['numeric', 'required_with:opening_balance_date', 'nullable'],
             'opening_balance_date' => ['date', 'required_with:opening_balance', 'nullable'],
             'virtual_balance'      => ['numeric', 'nullable'],

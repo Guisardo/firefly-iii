@@ -1,8 +1,8 @@
 <?php
 
 /*
- * UpdateController.php
- * Copyright (c) 2025 james@firefly-iii.org.
+ * StoreController.php
+ * Copyright (c) 2026 james@firefly-iii.org.
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
  *
@@ -25,25 +25,17 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Controllers\Models\UserGroup;
 
 use FireflyIII\Api\V1\Controllers\Controller;
-use FireflyIII\Api\V1\Requests\Models\UserGroup\UpdateRequest;
-use FireflyIII\Api\V1\Requests\Models\UserGroup\UpdateMembershipRequest;
-use FireflyIII\Api\V1\Requests\Models\UserGroup\UseRequest;
-use FireflyIII\Models\UserGroup;
+use FireflyIII\Api\V1\Requests\Models\UserGroup\StoreRequest;
 use FireflyIII\Repositories\UserGroup\UserGroupRepositoryInterface;
-use FireflyIII\Support\Facades\Preferences;
 use FireflyIII\Transformers\UserGroupTransformer;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Log;
 
-final class UpdateController extends Controller
+final class StoreController extends Controller
 {
     public const string RESOURCE_KEY = 'user_groups';
 
     private UserGroupRepositoryInterface $repository;
 
-    /**
-     * AccountController constructor.
-     */
     public function __construct()
     {
         parent::__construct();
@@ -55,32 +47,9 @@ final class UpdateController extends Controller
         });
     }
 
-    public function update(UpdateRequest $request, UserGroup $userGroup): JsonResponse
+    public function store(StoreRequest $request): JsonResponse
     {
-        Log::debug(sprintf('Now in %s', __METHOD__));
-        $data        = $request->getData();
-        $userGroup   = $this->repository->update($userGroup, $data);
-        $userGroup->refresh();
-        Preferences::mark();
-
-        $transformer = new UserGroupTransformer();
-        $transformer->setParameters($this->parameters);
-
-        return response()->api($this->jsonApiObject(self::RESOURCE_KEY, $userGroup, $transformer))->header('Content-Type', self::CONTENT_TYPE);
-    }
-
-    public function useUserGroup(UseRequest $request, UserGroup $userGroup): JsonResponse
-    {
-        Log::debug(sprintf('Now in %s', __METHOD__));
-        $this->repository->useUserGroup($userGroup);
-
-        return response()->json([], 204);
-    }
-
-    public function updateMembership(UpdateMembershipRequest $request, UserGroup $userGroup): JsonResponse
-    {
-        Log::debug(sprintf('Now in %s', __METHOD__));
-        $userGroup = $this->repository->updateMembership($userGroup, $request->getData());
+        $userGroup = $this->repository->store($request->getData());
         $userGroup->refresh();
 
         $transformer = new UserGroupTransformer();

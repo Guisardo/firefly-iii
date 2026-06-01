@@ -29,6 +29,7 @@ use FireflyIII\Api\V1\Requests\Models\Account\ShowRequest;
 use FireflyIII\Models\Account;
 use FireflyIII\Repositories\Account\AccountRepositoryInterface;
 use FireflyIII\Support\Http\Api\AccountFilter;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\JsonApi\Enrichments\AccountEnrichment;
 use FireflyIII\Transformers\AccountTransformer;
 use FireflyIII\User;
@@ -58,6 +59,10 @@ final class ShowController extends Controller
         $this->middleware(function ($request, $next) {
             $this->repository = app(AccountRepositoryInterface::class);
             $this->repository->setUser(auth()->user());
+            $context = app(AdministrationContext::class);
+            if ($context->hasResolvedAdministration()) {
+                $this->repository->setUserGroup($context->userGroup());
+            }
 
             return $next($request);
         });
@@ -98,6 +103,10 @@ final class ShowController extends Controller
         $enrichment->setStart($start);
         $enrichment->setEnd($end);
         $enrichment->setUser($admin);
+        $context     = app(AdministrationContext::class);
+        if ($context->hasResolvedAdministration()) {
+            $enrichment->setUserGroup($context->userGroup());
+        }
         $accounts    = $enrichment->enrich($accounts);
 
         // make paginator:
@@ -135,6 +144,10 @@ final class ShowController extends Controller
         $enrichment->setStart($start);
         $enrichment->setEnd($end);
         $enrichment->setUser($admin);
+        $context                                            = app(AdministrationContext::class);
+        if ($context->hasResolvedAdministration()) {
+            $enrichment->setUserGroup($context->userGroup());
+        }
         $account                                            = $enrichment->enrichSingle($account);
 
         /** @var AccountTransformer $transformer */

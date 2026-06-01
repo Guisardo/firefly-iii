@@ -29,6 +29,7 @@ use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Support\Http\Api\TransactionFilter;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\JsonApi\Enrichments\TransactionGroupEnrichment;
 use FireflyIII\Transformers\TransactionGroupTransformer;
 use FireflyIII\User;
@@ -67,8 +68,14 @@ final class ShowController extends Controller
         // use new group collector:
         /** @var GroupCollectorInterface $collector */
         $collector    = app(GroupCollectorInterface::class);
+        $context      = app(AdministrationContext::class);
         $collector
             ->setUser($admin)
+        ;
+        if ($context->hasResolvedAdministration()) {
+            $collector->setUserGroup($context->userGroup());
+        }
+        $collector
             // all info needed for the API:
             ->withAPIInformation()
             // set page size:
@@ -115,8 +122,14 @@ final class ShowController extends Controller
         // use new group collector:
         /** @var GroupCollectorInterface $collector */
         $collector     = app(GroupCollectorInterface::class);
+        $context       = app(AdministrationContext::class);
         $collector
             ->setUser($admin)
+        ;
+        if ($context->hasResolvedAdministration()) {
+            $collector->setUserGroup($context->userGroup());
+        }
+        $collector
             // filter on transaction group.
             ->setTransactionGroup($transactionGroup)
             // all info needed for the API:

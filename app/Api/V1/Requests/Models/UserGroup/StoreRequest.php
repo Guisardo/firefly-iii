@@ -1,8 +1,8 @@
 <?php
 
 /*
- * UpdateRequest.php
- * Copyright (c) 2021 james@firefly-iii.org
+ * StoreRequest.php
+ * Copyright (c) 2026 james@firefly-iii.org
  *
  * This file is part of Firefly III (https://github.com/firefly-iii).
  *
@@ -25,45 +25,32 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Requests\Models\UserGroup;
 
 use FireflyIII\Api\V1\Requests\Models\UserGroup\Concerns\AuthorizesUserGroupRequests;
-use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Support\Request\ConvertsDataTypes;
 use Illuminate\Foundation\Http\FormRequest;
 
-/**
- * Class UpdateRequest
- */
-class UpdateRequest extends FormRequest
+class StoreRequest extends FormRequest
 {
     use AuthorizesUserGroupRequests;
     use ConvertsDataTypes;
 
-    protected array $acceptedRoles = [UserRoleEnum::FULL];
+    protected array $acceptedRoles = [];
 
     public function authorize(): bool
     {
-        return $this->authorizeRouteUserGroup($this->acceptedRoles);
+        return $this->authorizeAuthenticatedUser();
     }
 
     public function getData(): array
     {
-        $fields = [
-            'title'                 => ['title', 'convertString'],
-            'primary_currency_id'   => ['primary_currency_id', 'convertInteger'],
-            'primary_currency_code' => ['primary_currency_code', 'convertString'],
+        return [
+            'title' => $this->convertString('title'),
         ];
-
-        return $this->getAllData($fields);
     }
 
-    /**
-     * Rules for this request.
-     */
     public function rules(): array
     {
         return [
-            'title'                 => ['required', 'min:1', 'max:255'],
-            'primary_currency_id'   => 'exists:transaction_currencies,id',
-            'primary_currency_code' => 'exists:transaction_currencies,code',
+            'title' => ['required', 'min:1', 'max:255'],
         ];
     }
 }

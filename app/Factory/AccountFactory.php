@@ -206,7 +206,7 @@ class AccountFactory
         $active         = array_key_exists('active', $data) ? $data['active'] : true;
         $databaseData   = [
             'user_id'         => $this->user->id,
-            'user_group_id'   => $this->user->user_group_id,
+            'user_group_id'   => $data['user_group_id'] ?? $this->user->user_group_id,
             'account_type_id' => $type->id,
             'name'            => $data['name'],
             'order'           => 25_000,

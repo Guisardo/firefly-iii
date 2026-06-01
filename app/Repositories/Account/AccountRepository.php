@@ -40,6 +40,7 @@ use FireflyIII\Services\Internal\Destroy\AccountDestroyService;
 use FireflyIII\Services\Internal\Update\AccountUpdateService;
 use FireflyIII\Support\Facades\Amount;
 use FireflyIII\Support\Facades\Steam;
+use FireflyIII\Support\Http\SharedAdministration\AdministrationContext;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupInterface;
 use FireflyIII\Support\Repositories\UserGroup\UserGroupTrait;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -191,7 +192,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
 
     public function getAccountsById(array $accountIds): Collection
     {
-        $query = $this->user->accounts();
+        $query = $this->readAccounts();
 
         if (0 !== count($accountIds)) {
             $query->whereIn('accounts.id', $accountIds);
@@ -211,7 +212,7 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
             AccountTypeEnum::LOAN->value,
             AccountTypeEnum::DEBT->value,
         ], $types);
-        $query   = $this->user->accounts();
+        $query   = $this->readAccounts();
         if (0 !== count($types)) {
             $query->accountTypeIn($types);
         }
@@ -239,6 +240,16 @@ class AccountRepository implements AccountRepositoryInterface, UserGroupInterfac
         }
 
         return $query->get(['accounts.*']);
+    }
+
+    private function readAccounts(): HasMany
+    {
+        $context = app(AdministrationContext::class);
+        if ($context->hasResolvedAdministration()) {
+            return $this->userGroup->accounts();
+        }
+
+        return $this->user->accounts();
     }
 
     /**

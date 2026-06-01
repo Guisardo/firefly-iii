@@ -25,12 +25,14 @@ declare(strict_types=1);
 namespace Tests\integration\Api\Models\Account;
 
 use FireflyIII\Enums\AccountTypeEnum;
+use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Models\Account;
 use FireflyIII\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Passport\Passport;
 use Override;
 use Tests\integration\TestCase;
+use Tests\integration\Traits\CreatesMultiGroupFixtures;
 
 /**
  * @internal
@@ -40,6 +42,7 @@ use Tests\integration\TestCase;
 final class ShowControllerTest extends TestCase
 {
     use RefreshDatabase;
+    use CreatesMultiGroupFixtures;
 
     private User $user;
 
@@ -68,6 +71,67 @@ final class ShowControllerTest extends TestCase
         $response = $this->getJson(route('api.v1.accounts.index').'?type=foobar');
         $response->assertUnprocessable();
         $response->assertJson(['errors' => ['type' => ['The selected type is invalid.']]]);
+    }
+
+    public function testIndexUsesExplicitRequestedGroupInsteadOfActiveGroup(): void
+    {
+        $fixture          = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $requestedCreator = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
+        $activeAccount    = $this->createAccountInGroup($fixture['user'], $fixture['active_group'], AccountTypeEnum::ASSET);
+        $requestedAccount = $this->createAccountInGroup($requestedCreator, $fixture['requested_group'], AccountTypeEnum::ASSET);
+
+        Passport::actingAs($fixture['user']);
+
+        $response = $this->getJson(route('api.v1.accounts.index', ['user_group_id' => $fixture['requested_group']->id]));
+
+        $response->assertOk();
+        $response->assertJson(['meta' => ['pagination' => ['total' => 1]]]);
+        self::assertSame((string) $requestedAccount->id, $response->json('data.0.id'));
+        self::assertNotSame((string) $activeAccount->id, $response->json('data.0.id'));
+        self::assertSame($fixture['active_group']->id, $fixture['user']->refresh()->user_group_id);
+    }
+
+    public function testShowUsesExplicitRequestedGroup(): void
+    {
+        $fixture          = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $requestedCreator = $this->createUserInGroup($fixture['requested_group'], UserRoleEnum::OWNER);
+        $requestedAccount = $this->createAccountInGroup($requestedCreator, $fixture['requested_group'], AccountTypeEnum::ASSET);
+
+        Passport::actingAs($fixture['user']);
+
+        $response = $this->getJson(route('api.v1.accounts.show', [
+            'account'       => $requestedAccount->id,
+            'user_group_id' => $fixture['requested_group']->id,
+        ]));
+
+        $response->assertOk();
+        self::assertSame((string) $requestedAccount->id, $response->json('data.id'));
+    }
+
+    public function testShowFailsClosedWhenRouteAccountIsOutsideRequestedGroup(): void
+    {
+        $fixture       = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+        $activeAccount = $this->createAccountInGroup($fixture['user'], $fixture['active_group'], AccountTypeEnum::ASSET);
+
+        Passport::actingAs($fixture['user']);
+
+        $response = $this->getJson(route('api.v1.accounts.show', [
+            'account'       => $activeAccount->id,
+            'user_group_id' => $fixture['requested_group']->id,
+        ]));
+
+        $response->assertNotFound();
+    }
+
+    public function testIndexDeniesUnrelatedExplicitGroup(): void
+    {
+        $fixture = $this->createMultiGroupUserFixture(UserRoleEnum::READ_ONLY);
+
+        Passport::actingAs($fixture['user']);
+
+        $response = $this->getJson(route('api.v1.accounts.index', ['user_group_id' => $fixture['unrelated_group']->id]));
+
+        $response->assertUnauthorized();
     }
 
     #[Override]
