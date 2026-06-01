@@ -27,6 +27,7 @@ use Carbon\Carbon;
 use FireflyIII\Casts\SeparateTimezoneCaster;
 use FireflyIII\Enums\TransactionTypeEnum;
 use FireflyIII\Handlers\Observer\DeletedTransactionJournalObserver;
+use FireflyIII\Support\Binder\ResolvesUserGroupForRouteBinding;
 use FireflyIII\Support\Models\ReturnsIntegerIdTrait;
 use FireflyIII\Support\Models\ReturnsIntegerUserIdTrait;
 use FireflyIII\User;
@@ -40,6 +41,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Routing\Route;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -93,13 +95,28 @@ class TransactionJournal extends Model
      *
      * @throws NotFoundHttpException
      */
-    public static function routeBinder(self|string $value): self
+    public static function routeBinder(self|string $value, ?Route $route = null): self
     {
         if ($value instanceof self) {
             $value = (int) $value->id;
         }
         if (auth()->check()) {
             $journalId = (int) $value;
+            $userGroup = ResolvesUserGroupForRouteBinding::resolvedUserGroup($route);
+            if (null !== $userGroup) {
+                /** @var null|TransactionJournal $journal */
+                $journal = self::query()
+                    ->where('transaction_journals.id', $journalId)
+                    ->where('transaction_journals.user_group_id', $userGroup->id)
+                    ->first(['transaction_journals.*'])
+                ;
+                if (null !== $journal) {
+                    return $journal;
+                }
+            }
+            if (ResolvesUserGroupForRouteBinding::hasExplicitUserGroup($route)) {
+                throw new NotFoundHttpException();
+            }
 
             /** @var User $user */
             $user      = auth()->user();

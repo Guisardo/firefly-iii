@@ -56,6 +56,7 @@ if(sortingColumn[0] === '-') {
 }
 
 page = parseInt(params.page ?? 1);
+const userGroupId = parseInt(params.user_group_id ?? 0);
 
 showInternalsButton();
 showWizardButton();
@@ -216,7 +217,14 @@ let index = function () {
         generatePageUrl(includePageNr) {
             let url = './accounts/' + type + '?column=' + this.pageOptions.sortingColumn + '&direction=' + this.pageOptions.sortDirection + '&page=';
             if (includePageNr) {
-                return url + this.page
+                url = url + this.page;
+                if (userGroupId > 0) {
+                    url += '&user_group_id=' + userGroupId;
+                }
+                return url;
+            }
+            if (userGroupId > 0) {
+                return url + '&user_group_id=' + userGroupId;
             }
             return url;
         },
@@ -381,6 +389,9 @@ let index = function () {
                 start: start,
                 end: end
             };
+            if (userGroupId > 0) {
+                params.user_group_id = userGroupId;
+            }
 
             if (!this.tableColumns.balance_difference.enabled) {
                 // delete params.startPeriod;

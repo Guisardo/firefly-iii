@@ -62,8 +62,19 @@ jobs:
       - name: Focused shared-access tests
         run: |
           php vendor/bin/phpunit -c phpunit.xml --no-coverage \
+            --log-junit storage/logs/shared-admin-iteration-4-junit.xml \
             tests/integration/Api/Models/Account/ShowControllerTest.php \
-            tests/integration/Api/Models/Account/ListControllerTest.php
+            tests/integration/Api/Models/Account/SharedAdministrationListControllerTest.php \
+            tests/integration/Api/Models/Account/SharedAdministrationWriteControllerTest.php \
+            tests/integration/Api/Models/Transaction/ShowControllerTest.php \
+            tests/integration/Api/Models/Transaction/WriteScopeControllerTest.php \
+            tests/integration/Api/Models/Transaction/TransactionJournalScopeControllerTest.php \
+            tests/integration/Api/Models/UserGroup/UserGroupControllerTest.php \
+            tests/integration/Support/Http/SharedAdministration/AdministrationResolverTest.php \
+            tests/integration/Support/Http/SharedAdministration/ScopedRequestAuthorizationTest.php \
+            tests/integration/Support/Binder/RouteBinderUserGroupTest.php \
+            tests/integration/Api/SharedAdministration/MultiGroupRegressionTest.php \
+            tests/integration/Api/SharedAdministration/SharedAdministrationAuditTest.php
 
       - name: Migration smoke
         env:
@@ -78,6 +89,7 @@ jobs:
           name: php-validation-logs
           path: |
             storage/logs
+            storage/logs/shared-admin-iteration-4-junit.xml
             .phpunit.cache
           if-no-files-found: ignore
 
@@ -191,58 +203,3 @@ jobs:
             storage/logs/docker-smoke.log
             /tmp/firefly-smoke-response.txt
           if-no-files-found: ignore
-
-  docker-publish:
-    name: Publish shared-admin image
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    needs:
-      - php-validation
-      - frontend-build
-      - docker-smoke
-    if: github.event_name != 'pull_request' && github.repository == 'Guisardo/firefly-iii' && (github.ref == 'refs/heads/feature/iteration-2-shared-admin' || github.event_name == 'workflow_dispatch')
-
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Verify Docker Hub credentials
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          if [ -z "${DOCKERHUB_USERNAME}" ] || [ -z "${DOCKERHUB_TOKEN}" ]; then
-            echo 'DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets are required to publish the shared-admin image.'
-            exit 1
-          fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Capture build date
-        id: build-date
-        run: echo "value=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push shared-admin image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          pull: true
-          push: true
-          build-args: |
-            BUILD_DATE=${{ steps.build-date.outputs.value }}
-            VCS_REF=${{ github.sha }}
-          tags: |
-            ${{ env.SHARED_ADMIN_IMAGE }}:shared-admin-${{ github.sha }}
-            ${{ env.SHARED_ADMIN_IMAGE }}:shared-admin-latest
-          labels: |
-            org.opencontainers.image.created=${{ steps.build-date.outputs.value }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.title=Firefly III shared administration fork

@@ -82,11 +82,17 @@ let index = function () {
             this.notifications.wait.show = true;
             this.notifications.wait.text = i18next.t('firefly.wait_loading_data')
             this.transactions = [];
-            const urlParts = window.location.href.split('/');
+            const urlParts = window.location.href.split('?')[0].split('/');
             const type = urlParts[urlParts.length - 1];
+            const queryParams = new URLSearchParams(window.location.search);
+            const userGroupId = parseInt(queryParams.get('user_group_id') ?? 0);
             let getter = new Get();
+            let params = {page: page, type: type};
+            if (userGroupId > 0) {
+                params.user_group_id = userGroupId;
+            }
 
-            getter.list({page: page, type: type}).then(response => {
+            getter.list(params).then(response => {
                 this.parseTransactions(response.data.data)
 
                 // set meta data

@@ -19,6 +19,23 @@ on:
           - high-critical
           - critical
           - advisory
+      readiness_override:
+        description: Allow publish when release readiness artifacts are incomplete.
+        required: true
+        type: boolean
+        default: false
+      readiness_override_rationale:
+        description: Required when readiness_override is true; recorded in release evidence.
+        required: false
+        type: string
+      release_evidence_commit:
+        description: Commit SHA from the focused shared-administration release evidence run.
+        required: false
+        type: string
+      release_evidence_url:
+        description: URL to retained focused test, compatibility, smoke, rollback, and observability evidence.
+        required: false
+        type: string
 
 run-name: Docker Hub shared-admin image from ${{ github.ref_name }} by @${{ github.actor }}
 
@@ -43,11 +60,15 @@ jobs:
     environment: ${{ inputs.environment }}
 
     steps:
-      - name: Validate dispatch scope and secrets
+      - name: Validate dispatch scope, approval, and secrets
         env:
           DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          READINESS_OVERRIDE: ${{ inputs.readiness_override }}
+          READINESS_OVERRIDE_RATIONALE: ${{ inputs.readiness_override_rationale }}
+          RELEASE_EVIDENCE_COMMIT: ${{ inputs.release_evidence_commit }}
+          RELEASE_EVIDENCE_URL: ${{ inputs.release_evidence_url }}
         run: |
           set -euo pipefail
 
@@ -76,6 +97,22 @@ jobs:
             exit 1
           fi
 
+          if [ "$READINESS_OVERRIDE" = "true" ] && [ -z "$READINESS_OVERRIDE_RATIONALE" ]; then
+            echo "::error::readiness_override requires a recorded rationale."
+            exit 1
+          fi
+
+          if [ "$READINESS_OVERRIDE" != "true" ]; then
+            if [ "$RELEASE_EVIDENCE_COMMIT" != "$GITHUB_SHA" ]; then
+              echo "::error::release_evidence_commit must match this workflow commit SHA unless readiness_override is approved."
+              exit 1
+            fi
+            if [ -z "$RELEASE_EVIDENCE_URL" ]; then
+              echo "::error::release_evidence_url is required unless readiness_override is approved."
+              exit 1
+            fi
+          fi
+
       # actions/checkout@v6
       - name: Check out source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -86,57 +123,42 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
 
-      - name: Log in to Docker Hub
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-
-      - name: Build and push immutable image
-        id: build-image
+      - name: Build local release candidate
+        id: build-candidate
         run: |
           set -euo pipefail
 
           mkdir -p build/release
+          build_date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           {
             echo "image=$IMAGE_REPOSITORY"
             echo "immutable_tag=$IMMUTABLE_TAG"
             echo "moving_tag=$MOVING_TAG"
+            echo "build_date=$build_date"
           } > build/release/image-tags.env
 
           docker buildx build \
             --pull \
             --platform linux/amd64 \
+            --load \
+            --build-arg "BUILD_DATE=$build_date" \
+            --build-arg "VCS_REF=$GITHUB_SHA" \
+            --label "org.opencontainers.image.created=$build_date" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$GITHUB_SHA" \
             --label "org.opencontainers.image.ref.name=$GITHUB_REF_NAME" \
-            --attest type=provenance,mode=max \
-            --attest type=sbom \
             --metadata-file build/release/build-metadata.json \
-            --push \
             --tag "$IMAGE_REPOSITORY:$IMMUTABLE_TAG" \
-            --tag "$IMAGE_REPOSITORY:$MOVING_TAG" \
             .
 
-          image_digest="$(jq -r '."containerimage.digest" // empty' build/release/build-metadata.json)"
-          if [ -z "$image_digest" ] || [ "$image_digest" = "null" ]; then
-            echo "::error::Docker Buildx did not return an image digest."
+          local_image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE_REPOSITORY:$IMMUTABLE_TAG")"
+          if [ -z "$local_image_id" ]; then
+            echo "::error::Local release candidate image was not created."
             exit 1
           fi
 
-          echo "IMAGE_DIGEST=$image_digest" >> "$GITHUB_ENV"
-          echo "image_digest=$image_digest" >> "$GITHUB_OUTPUT"
-          echo "image_ref=$IMAGE_REPOSITORY@$image_digest" >> "$GITHUB_OUTPUT"
-          echo "$IMAGE_REPOSITORY@$image_digest" > build/release/image-digest.txt
-          echo "digest=$image_digest" >> build/release/image-tags.env
-
-      - name: Capture pushed image metadata
-        run: |
-          set -euo pipefail
-          docker buildx imagetools inspect "$IMAGE_REPOSITORY@$IMAGE_DIGEST" > build/release/image-inspect.txt
-          docker buildx imagetools inspect --raw "$IMAGE_REPOSITORY@$IMAGE_DIGEST" > build/release/image-manifest.json
+          echo "$local_image_id" > build/release/local-image-id.txt
+          echo "local_image_id=$local_image_id" >> "$GITHUB_OUTPUT"
 
       # aquasecurity/trivy-action@v0.32.0
       - name: Vulnerability, secret, and config scan
@@ -145,7 +167,7 @@ jobs:
         continue-on-error: true
         with:
           scan-type: image
-          image-ref: ${{ steps.build-image.outputs.image_ref }}
+          image-ref: ${{ env.IMAGE_REPOSITORY }}:${{ env.IMMUTABLE_TAG }}
           scanners: vuln,secret,misconfig
           severity: ${{ inputs.vulnerability_gate == 'critical' && 'CRITICAL' || 'HIGH,CRITICAL' }}
           ignore-unfixed: true
@@ -159,7 +181,7 @@ jobs:
         uses: aquasecurity/trivy-action@dc5a429b52fcf669ce959baa2c2dd26090d2a6c4
         with:
           scan-type: image
-          image-ref: ${{ steps.build-image.outputs.image_ref }}
+          image-ref: ${{ env.IMAGE_REPOSITORY }}:${{ env.IMMUTABLE_TAG }}
           format: cyclonedx
           output: build/release/sbom.cdx.json
 
@@ -176,7 +198,7 @@ jobs:
           output: build/release/trivy-license.txt
           exit-code: '0'
 
-      - name: Build provenance predicate
+      - name: Build pre-publish provenance predicate
         run: |
           set -euo pipefail
           jq -n \
@@ -188,9 +210,9 @@ jobs:
             --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             --arg actor "$GITHUB_ACTOR" \
             --arg environment "${{ inputs.environment }}" \
-            --arg image "$IMAGE_REPOSITORY@$IMAGE_DIGEST" \
-            --arg immutable_tag "$IMAGE_REPOSITORY:$IMMUTABLE_TAG" \
+            --arg image "$IMAGE_REPOSITORY:$IMMUTABLE_TAG" \
             --arg moving_tag "$IMAGE_REPOSITORY:$MOVING_TAG" \
+            --arg local_image_id "${{ steps.build-candidate.outputs.local_image_id }}" \
             '{
               buildDefinition: {
                 buildType: "https://github.com/Guisardo/firefly-iii/.github/workflows/docker-publish.yml",
@@ -201,7 +223,8 @@ jobs:
                   sha: $sha,
                   environment: $environment,
                   image: $image,
-                  tags: [$immutable_tag, $moving_tag]
+                  movingTag: $moving_tag,
+                  localImageId: $local_image_id
                 },
                 internalParameters: {}
               },
@@ -217,28 +240,145 @@ jobs:
                 ]
               },
               actor: $actor
-            }' > build/release/provenance-predicate.json
+            }' > build/release/provenance-predicate.template.json
+
+          jq -e . build/release/provenance-predicate.template.json >/dev/null
+
+      - name: Enforce pre-publish release readiness
+        env:
+          TRIVY_VULNERABILITY_OUTCOME: ${{ steps.trivy-vulnerability.outcome }}
+          TRIVY_SBOM_OUTCOME: ${{ steps.trivy-sbom.outcome }}
+          TRIVY_LICENSE_OUTCOME: ${{ steps.trivy-license.outcome }}
+          READINESS_OVERRIDE: ${{ inputs.readiness_override }}
+          READINESS_OVERRIDE_RATIONALE: ${{ inputs.readiness_override_rationale }}
+          RELEASE_EVIDENCE_COMMIT: ${{ inputs.release_evidence_commit }}
+          RELEASE_EVIDENCE_URL: ${{ inputs.release_evidence_url }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p build/release
+          {
+            echo "readiness_override=$READINESS_OVERRIDE"
+            echo "readiness_override_rationale=$READINESS_OVERRIDE_RATIONALE"
+            echo "release_evidence_commit=$RELEASE_EVIDENCE_COMMIT"
+            echo "release_evidence_url=$RELEASE_EVIDENCE_URL"
+          } > build/release/readiness-override.env
+
+          if [ "$TRIVY_VULNERABILITY_OUTCOME" != "success" ]; then
+            echo "::error::Image vulnerability/secret/config gate failed. No Docker Hub tags were pushed."
+            exit 1
+          fi
+
+          if [ "$TRIVY_SBOM_OUTCOME" != "success" ]; then
+            echo "::error::SBOM generation failed. No Docker Hub tags were pushed."
+            exit 1
+          fi
+
+          missing_artifacts=""
+          for artifact in \
+            build/release/build-metadata.json \
+            build/release/image-tags.env \
+            build/release/local-image-id.txt \
+            build/release/provenance-predicate.template.json \
+            build/release/sbom.cdx.json \
+            build/release/trivy-image.sarif \
+            build/release/trivy-license.txt
+          do
+            if [ ! -s "$artifact" ]; then
+              missing_artifacts="${missing_artifacts}${artifact}"$'\n'
+            fi
+          done
+
+          if [ -n "$missing_artifacts" ]; then
+            printf '%s' "$missing_artifacts" > build/release/missing-readiness-artifacts.txt
+            if [ "$READINESS_OVERRIDE" != "true" ]; then
+              echo "::error::Release readiness artifacts are missing. No Docker Hub tags were pushed."
+              printf '%s' "$missing_artifacts"
+              exit 1
+            fi
+            echo "::warning::Release readiness override approved for missing artifacts."
+          else
+            : > build/release/missing-readiness-artifacts.txt
+          fi
+
+          jq -e . build/release/sbom.cdx.json >/dev/null
+          jq -e . build/release/provenance-predicate.template.json >/dev/null
+          echo "ready_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > build/release/pre-publish-readiness.env
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Push immutable image and capture digest
+        id: publish-immutable
+        run: |
+          set -euo pipefail
+
+          docker push "$IMAGE_REPOSITORY:$IMMUTABLE_TAG"
+          docker buildx imagetools inspect "$IMAGE_REPOSITORY:$IMMUTABLE_TAG" > build/release/image-inspect.txt
+
+          image_digest="$(awk '/^Digest:/ { print $2; exit }' build/release/image-inspect.txt)"
+          case "$image_digest" in
+            sha256:*)
+              ;;
+            *)
+              echo "::error::Unable to resolve pushed immutable image digest."
+              cat build/release/image-inspect.txt
+              exit 1
+              ;;
+          esac
+
+          docker buildx imagetools inspect --raw "$IMAGE_REPOSITORY@$image_digest" > build/release/image-manifest.json
+          echo "$IMAGE_REPOSITORY@$image_digest" > build/release/image-digest.txt
+          echo "digest=$image_digest" >> build/release/image-tags.env
+          echo "PUBLISHED_IMAGE_DIGEST=$image_digest" >> "$GITHUB_ENV"
+          echo "image_digest=$image_digest" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$IMAGE_REPOSITORY@$image_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Build digest provenance predicate
+        run: |
+          set -euo pipefail
+          jq \
+            --arg image "$IMAGE_REPOSITORY@$PUBLISHED_IMAGE_DIGEST" \
+            --arg immutable_tag "$IMAGE_REPOSITORY:$IMMUTABLE_TAG" \
+            --arg moving_tag "$IMAGE_REPOSITORY:$MOVING_TAG" \
+            --arg digest "$PUBLISHED_IMAGE_DIGEST" \
+            '
+              .buildDefinition.externalParameters.image = $image
+              | .buildDefinition.externalParameters.immutableTag = $immutable_tag
+              | .buildDefinition.externalParameters.movingTag = $moving_tag
+              | .buildDefinition.externalParameters.digest = $digest
+              | .subject = [
+                  {
+                    name: $image,
+                    digest: { sha256: ($digest | sub("^sha256:"; "")) }
+                  }
+                ]
+            ' build/release/provenance-predicate.template.json > build/release/provenance-predicate.json
+
+          jq -e . build/release/provenance-predicate.json >/dev/null
 
       # sigstore/cosign-installer@v3.9.2
       - name: Install Cosign
-        if: steps.trivy-vulnerability.outcome == 'success'
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159
 
       - name: Sign image and attach attestations
-        if: steps.trivy-vulnerability.outcome == 'success'
         run: |
           set -euo pipefail
-          image_ref="$IMAGE_REPOSITORY@$IMAGE_DIGEST"
+          image_ref="$IMAGE_REPOSITORY@$PUBLISHED_IMAGE_DIGEST"
 
           cosign sign --yes "$image_ref"
           cosign attest --yes --type cyclonedx --predicate build/release/sbom.cdx.json "$image_ref"
           cosign attest --yes --type slsaprovenance --predicate build/release/provenance-predicate.json "$image_ref"
 
       - name: Verify signature and attestations
-        if: steps.trivy-vulnerability.outcome == 'success'
         run: |
           set -euo pipefail
-          image_ref="$IMAGE_REPOSITORY@$IMAGE_DIGEST"
+          image_ref="$IMAGE_REPOSITORY@$PUBLISHED_IMAGE_DIGEST"
           identity_regexp="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-publish.yml@${GITHUB_REF}$"
 
           cosign verify \
@@ -258,25 +398,56 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "$image_ref" > build/release/cosign-provenance-verify.txt
 
+      - name: Promote moving tag
+        run: |
+          set -euo pipefail
+
+          docker tag "$IMAGE_REPOSITORY:$IMMUTABLE_TAG" "$IMAGE_REPOSITORY:$MOVING_TAG"
+          docker push "$IMAGE_REPOSITORY:$MOVING_TAG"
+          docker buildx imagetools inspect "$IMAGE_REPOSITORY:$MOVING_TAG" > build/release/moving-tag-inspect.txt
+
+          moving_digest="$(awk '/^Digest:/ { print $2; exit }' build/release/moving-tag-inspect.txt)"
+          if [ "$moving_digest" != "$PUBLISHED_IMAGE_DIGEST" ]; then
+            echo "::error::Moving tag digest does not match signed immutable digest."
+            cat build/release/moving-tag-inspect.txt
+            exit 1
+          fi
+
+          echo "$IMAGE_REPOSITORY:$MOVING_TAG@$moving_digest" > build/release/moving-tag-digest.txt
+
       - name: Write release evidence summary
         if: always()
         env:
           TRIVY_VULNERABILITY_OUTCOME: ${{ steps.trivy-vulnerability.outcome }}
+          TRIVY_SBOM_OUTCOME: ${{ steps.trivy-sbom.outcome }}
           TRIVY_LICENSE_OUTCOME: ${{ steps.trivy-license.outcome }}
+          READINESS_OVERRIDE: ${{ inputs.readiness_override }}
+          READINESS_OVERRIDE_RATIONALE: ${{ inputs.readiness_override_rationale }}
+          RELEASE_EVIDENCE_COMMIT: ${{ inputs.release_evidence_commit }}
+          RELEASE_EVIDENCE_URL: ${{ inputs.release_evidence_url }}
         run: |
           set -euo pipefail
+          mkdir -p build/release
           {
             echo "# Shared-admin Docker image evidence"
             echo
-            echo "- Image: \`$IMAGE_REPOSITORY@${IMAGE_DIGEST:-unknown}\`"
+            echo "- Image repository: \`$IMAGE_REPOSITORY\`"
+            echo "- Pushed digest: \`${PUBLISHED_IMAGE_DIGEST:-not-pushed}\`"
             echo "- Immutable tag: \`$IMAGE_REPOSITORY:$IMMUTABLE_TAG\`"
             echo "- Moving tag: \`$IMAGE_REPOSITORY:$MOVING_TAG\`"
             echo "- Ref: \`$GITHUB_REF\`"
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Environment: \`${{ inputs.environment }}\`"
             echo "- Vulnerability gate: \`${{ inputs.vulnerability_gate }}\`"
-            echo "- Vulnerability scan outcome: \`$TRIVY_VULNERABILITY_OUTCOME\`"
-            echo "- License scan outcome: \`$TRIVY_LICENSE_OUTCOME\`"
+            echo "- Vulnerability scan outcome: \`${TRIVY_VULNERABILITY_OUTCOME:-not-run}\`"
+            echo "- SBOM outcome: \`${TRIVY_SBOM_OUTCOME:-not-run}\`"
+            echo "- License scan outcome: \`${TRIVY_LICENSE_OUTCOME:-not-run}\`"
+            echo "- Release evidence commit: \`${RELEASE_EVIDENCE_COMMIT:-not-provided}\`"
+            echo "- Release evidence URL: \`${RELEASE_EVIDENCE_URL:-not-provided}\`"
+            echo "- Readiness override: \`$READINESS_OVERRIDE\`"
+            if [ "$READINESS_OVERRIDE" = "true" ]; then
+              echo "- Readiness override rationale: \`$READINESS_OVERRIDE_RATIONALE\`"
+            fi
           } > build/release/release-evidence.md
 
           cat build/release/release-evidence.md >> "$GITHUB_STEP_SUMMARY"
@@ -290,14 +461,3 @@ jobs:
           path: build/release
           if-no-files-found: error
           retention-days: 30
-
-      - name: Enforce vulnerability gate
-        if: always()
-        env:
-          TRIVY_VULNERABILITY_OUTCOME: ${{ steps.trivy-vulnerability.outcome }}
-        run: |
-          set -euo pipefail
-          if [ "$TRIVY_VULNERABILITY_OUTCOME" != "success" ]; then
-            echo "::error::Image vulnerability/secret/config gate failed. See trivy-image.sarif artifact."
-            exit 1
-          fi
