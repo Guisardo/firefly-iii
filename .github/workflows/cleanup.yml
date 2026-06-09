@@ -73,13 +73,22 @@ jobs:
 
             for (const workflow of workflows) {
               for (let page = 0; page < pages; page += 1) {
-                let response = await github.rest.actions.listWorkflowRuns({
-                  owner: context.repo.owner,
-                  page: page,
-                  per_page: 100,
-                  repo: context.repo.repo,
-                  workflow_id: workflow
-                });
+                let response;
+                try {
+                  response = await github.rest.actions.listWorkflowRuns({
+                    owner: context.repo.owner,
+                    page: page,
+                    per_page: 100,
+                    repo: context.repo.repo,
+                    workflow_id: workflow
+                  });
+                } catch (error) {
+                  if (error.status === 404) {
+                    console.log(`Workflow '${workflow}' is not registered in GitHub Actions. Skipping...`);
+                    break;
+                  }
+                  throw error;
+                }
 
                 if (response.data.workflow_runs.length > 0) {
                   for (const run of response.data.workflow_runs) {
