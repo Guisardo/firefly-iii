@@ -15,7 +15,7 @@ COPY public ./public
 RUN npm --workspace resources/assets/v1 run production \
     && npm --workspace resources/assets/v2 run build
 
-FROM php:8.5-cli-alpine@sha256:6ca76906d789edfac74e5f109c800b71e571bd313277133eaddc079733ee0b65 AS vendor
+FROM php:8.5.12-cli-alpine@sha256:6242840493d266f74e8ae6a88bfb826325a56a75f374d4b69ea1f9ec960ca1cd AS vendor
 
 WORKDIR /app
 
@@ -44,7 +44,7 @@ COPY --from=composer:2@sha256:1b73755de4f19775ba6087fd5313664493e06fab72b6fc27dc
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --no-scripts --optimize-autoloader
 
-FROM php:8.5-cli-alpine@sha256:6ca76906d789edfac74e5f109c800b71e571bd313277133eaddc079733ee0b65
+FROM php:8.5.12-cli-alpine@sha256:6242840493d266f74e8ae6a88bfb826325a56a75f374d4b69ea1f9ec960ca1cd
 
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
