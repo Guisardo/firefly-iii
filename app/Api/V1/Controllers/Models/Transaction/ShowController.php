@@ -24,7 +24,9 @@ declare(strict_types=1);
 
 namespace FireflyIII\Api\V1\Controllers\Models\Transaction;
 
+use Carbon\Carbon;
 use FireflyIII\Api\V1\Controllers\Controller;
+use FireflyIII\Api\V1\Requests\Models\Transaction\ShowRequest;
 use FireflyIII\Enums\UserRoleEnum;
 use FireflyIII\Helpers\Collector\GroupCollectorInterface;
 use FireflyIII\Models\TransactionGroup;
@@ -65,7 +67,7 @@ final class ShowController extends Controller
      *
      * Show all transactions.
      */
-    public function index(Request $request): JsonResponse
+    public function index(ShowRequest $request): JsonResponse
     {
         $pageSize     = $this->parameters->get('limit');
         $type         = $request->get('type') ?? 'default';
@@ -97,6 +99,7 @@ final class ShowController extends Controller
         if (null !== $this->parameters->get('start') || null !== $this->parameters->get('end')) {
             $collector->setRange($this->parameters->get('start'), $this->parameters->get('end'));
         }
+        $this->applyTimestampFilters($request, $collector);
         $paginator    = $collector->getPaginatedGroups();
         $paginator->setPath(route('api.v1.transactions.index').$this->buildParams());
 
@@ -171,5 +174,27 @@ final class ShowController extends Controller
     public function showJournal(TransactionJournal $transactionJournal): JsonResponse
     {
         return $this->show($transactionJournal->transactionGroup);
+    }
+
+    /**
+     * Apply the created/updated since/until filters and carry them into the paging links.
+     */
+    private function applyTimestampFilters(ShowRequest $request, GroupCollectorInterface $collector): void
+    {
+        $methods = [
+            'created_since' => 'setCreatedSince',
+            'created_until' => 'setCreatedUntil',
+            'updated_since' => 'setUpdatedSince',
+            'updated_until' => 'setUpdatedUntil',
+        ];
+        foreach ($methods as $field => $method) {
+            $moment = $request->attributes->get($field);
+            if (!$moment instanceof Carbon) {
+                continue;
+            }
+            $collector->{$method}($moment);
+            // the attribute holds the parsed moment, the query holds the text the client sent.
+            $this->parameters->set($field, (string) $request->query->get($field));
+        }
     }
 }

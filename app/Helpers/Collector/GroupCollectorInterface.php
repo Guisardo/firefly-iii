@@ -455,6 +455,16 @@ interface GroupCollectorInterface
     public function setCreatedAt(Carbon $date): self;
 
     /**
+     * Collect transactions created at or after this moment (timestamp of the transaction group).
+     */
+    public function setCreatedSince(Carbon $date): self;
+
+    /**
+     * Collect transactions created at or before this moment (timestamp of the transaction group).
+     */
+    public function setCreatedUntil(Carbon $date): self;
+
+    /**
      * Limit results to a specific currency, either foreign or normal one.
      */
     public function setCurrency(TransactionCurrency $currency): self;
@@ -592,6 +602,16 @@ interface GroupCollectorInterface
      * Collect transactions updated on a specific date.
      */
     public function setUpdatedAt(Carbon $date): self;
+
+    /**
+     * Collect transactions updated at or after this moment (timestamp of the transaction group).
+     */
+    public function setUpdatedSince(Carbon $date): self;
+
+    /**
+     * Collect transactions updated at or before this moment (timestamp of the transaction group).
+     */
+    public function setUpdatedUntil(Carbon $date): self;
 
     /**
      * Set the user object and start the query.
