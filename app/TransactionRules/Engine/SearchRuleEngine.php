@@ -34,6 +34,7 @@ use FireflyIII\Models\Rule;
 use FireflyIII\Models\RuleAction;
 use FireflyIII\Models\RuleGroup;
 use FireflyIII\Models\RuleTrigger;
+use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use FireflyIII\Repositories\Journal\JournalRepositoryInterface;
 use FireflyIII\Support\Search\SearchInterface;
@@ -531,6 +532,8 @@ class SearchRuleEngine implements RuleEngineInterface
         $result      = $actionClass->actOnArray($transaction);
         $journalId   = $transaction['transaction_journal_id'] ?? 0;
         if ($result) {
+            // the action wrote through plain queries, so the group it belongs to has to be touched here.
+            $this->touchGroup($transaction);
             $this->resultCount[$journalId] = array_key_exists($journalId, $this->resultCount) ? $this->resultCount[$journalId]++ : 1;
             Log::debug(sprintf(
                 'Action "%s" on journal #%d was executed, so count a result. Updated transaction journal count is now %d.',
@@ -614,5 +617,18 @@ class SearchRuleEngine implements RuleEngineInterface
         Log::debug('Found no journal, return default date.');
 
         return today(config('app.timezone'));
+    }
+
+    /**
+     * Rule actions write through plain queries and never touch the group,
+     * so the group's timestamp is moved here. Deleted groups are left alone.
+     */
+    private function touchGroup(array $transaction): void
+    {
+        $groupId = (int) ($transaction['transaction_group_id'] ?? 0);
+        if (0 === $groupId) {
+            return;
+        }
+        TransactionGroup::query()->where('id', $groupId)->update(['updated_at' => now()]);
     }
 }
