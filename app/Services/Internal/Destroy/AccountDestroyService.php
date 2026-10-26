@@ -29,6 +29,7 @@ use FireflyIII\Models\Account;
 use FireflyIII\Models\PiggyBank;
 use FireflyIII\Models\RecurrenceTransaction;
 use FireflyIII\Models\Transaction;
+use FireflyIII\Models\TransactionGroup;
 use FireflyIII\Models\TransactionJournal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -67,7 +68,10 @@ class AccountDestroyService
     public function moveTransactions(Account $account, Account $moveTo): void
     {
         Log::debug(sprintf('Move from account #%d to #%d', $account->id, $moveTo->id));
+        // moving transactions changes what the groups show, so their timestamp has to move too.
+        $groupIds = $this->findGroupIds($account);
         DB::table('transactions')->where('account_id', $account->id)->update(['account_id' => $moveTo->id]);
+        $this->touchGroups($groupIds);
 
         $collection = Transaction::query()
             ->groupBy('transaction_journal_id', 'account_id')
@@ -155,6 +159,37 @@ class AccountDestroyService
         $destroyService = app(RecurrenceDestroyService::class);
         foreach ($recurrences as $recurrenceId) {
             $destroyService->destroyById((int) $recurrenceId);
+        }
+    }
+
+    /**
+     * Ids of the transaction groups that have a live transaction on this account.
+     *
+     * @return array<int, int>
+     */
+    private function findGroupIds(Account $account): array
+    {
+        return DB::table('transactions')
+            ->join('transaction_journals', 'transaction_journals.id', '=', 'transactions.transaction_journal_id')
+            ->where('transactions.account_id', $account->id)
+            ->whereNull('transactions.deleted_at')
+            ->whereNull('transaction_journals.deleted_at')
+            ->distinct()
+            ->pluck('transaction_journals.transaction_group_id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->all()
+        ;
+    }
+
+    /**
+     * Touch the given transaction groups, one query per chunk. Deleted groups are left alone.
+     *
+     * @param array<int, int> $groupIds
+     */
+    private function touchGroups(array $groupIds): void
+    {
+        foreach (array_chunk($groupIds, 500) as $chunk) {
+            TransactionGroup::query()->whereIn('id', $chunk)->update(['updated_at' => now()]);
         }
     }
 
