@@ -205,6 +205,9 @@ class JournalUpdateService
         Preferences::mark();
 
         $this->transactionJournal->refresh();
+
+        // a journal-level change is a change of its group for clients that filter on the group timestamp.
+        $this->transactionJournal->transactionGroup?->touch();
         Log::debug('Done with update journal routine');
     }
 

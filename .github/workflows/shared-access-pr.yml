@@ -69,6 +69,7 @@ jobs:
             tests/integration/Api/Models/Transaction/ShowControllerTest.php \
             tests/integration/Api/Models/Transaction/WriteScopeControllerTest.php \
             tests/integration/Api/Models/Transaction/TransactionJournalScopeControllerTest.php \
+            tests/integration/Api/Models/Transaction/GroupTimestampPropagationTest.php \
             tests/integration/Api/Models/UserGroup/UserGroupControllerTest.php \
             tests/integration/Support/Http/SharedAdministration/AdministrationResolverTest.php \
             tests/integration/Support/Http/SharedAdministration/ScopedRequestAuthorizationTest.php \
