@@ -572,6 +572,49 @@ class GroupCollector implements GroupCollectorInterface
     }
 
     /**
+     * Order the rows in the database by id, created_at or updated_at of the transaction group.
+     * Unlike setSorting() this keeps paging intact. The order always ends in unique keys
+     * and the rows of one group stay together.
+     *
+     * @param array<int, array{0: string, 1: string}> $instructions pairs of field and direction
+     */
+    public function setOrderBy(array $instructions): GroupCollectorInterface
+    {
+        $columns   = [
+            'id'         => 'transaction_groups.id',
+            'created_at' => 'transaction_groups.created_at',
+            'updated_at' => 'transaction_groups.updated_at',
+        ];
+        $ordered   = [];
+        $direction = 'ASC';
+        $hasId     = false;
+        foreach ($instructions as $instruction) {
+            $field = (string) ($instruction[0] ?? '');
+            if (!array_key_exists($field, $columns)) {
+                continue;
+            }
+            $direction = 'desc' === strtolower((string) ($instruction[1] ?? 'asc')) ? 'DESC' : 'ASC';
+            $hasId     = $hasId || 'id' === $field;
+            $ordered[] = [$columns[$field], $direction];
+        }
+        if (0 === count($ordered)) {
+            return $this;
+        }
+        $this->query->reorder();
+        foreach ($ordered as [$column, $order]) {
+            $this->query->orderBy($column, $order);
+        }
+        if (!$hasId) {
+            // ties end in the direction of the last key.
+            $this->query->orderBy('transaction_groups.id', $direction);
+        }
+        $this->query->orderBy('transaction_journals.order', 'ASC');
+        $this->query->orderBy('transaction_journals.id', 'ASC');
+
+        return $this;
+    }
+
+    /**
      * Set the page to get.
      */
     public function setPage(int $page): GroupCollectorInterface

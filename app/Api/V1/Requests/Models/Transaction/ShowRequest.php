@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace FireflyIII\Api\V1\Requests\Models\Transaction;
 
 use FireflyIII\Api\V1\Requests\AggregateFormRequest;
+use FireflyIII\Api\V1\Requests\Generic\SortRequest;
 use FireflyIII\Api\V1\Requests\Generic\TimestampFilterRequest;
+use FireflyIII\Models\Transaction;
 use Override;
 
 /**
@@ -19,6 +21,7 @@ class ShowRequest extends AggregateFormRequest
     {
         return [
             TimestampFilterRequest::class,
+            [SortRequest::class, 'sort_class' => Transaction::class],
         ];
     }
 }

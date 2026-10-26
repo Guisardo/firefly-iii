@@ -514,6 +514,12 @@ interface GroupCollectorInterface
     public function setLimit(int $limit): self;
 
     /**
+     * Order the rows in the database by id, created_at or updated_at of the transaction group, keeping paging intact.
+     * Instructions are pairs of field and direction ('asc' or 'desc').
+     */
+    public function setOrderBy(array $instructions): self;
+
+    /**
      * Collect transactions after a specific date.
      */
     public function setMetaAfter(Carbon $date, string $field): self;

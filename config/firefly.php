@@ -849,6 +849,7 @@ return [
             'balance_difference',
             'pc_balance_difference',
         ],
+        'Transaction' => ['id', 'created_at', 'updated_at'],
     ],
     'allowed_db_sort_parameters'           => [
         'Account' => ['id', 'order', 'name', 'iban', 'active', 'account_type_id'],

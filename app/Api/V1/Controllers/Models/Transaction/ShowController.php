@@ -100,6 +100,7 @@ final class ShowController extends Controller
             $collector->setRange($this->parameters->get('start'), $this->parameters->get('end'));
         }
         $this->applyTimestampFilters($request, $collector);
+        $this->applySort($request, $collector);
         $paginator    = $collector->getPaginatedGroups();
         $paginator->setPath(route('api.v1.transactions.index').$this->buildParams());
 
@@ -174,6 +175,19 @@ final class ShowController extends Controller
     public function showJournal(TransactionJournal $transactionJournal): JsonResponse
     {
         return $this->show($transactionJournal->transactionGroup);
+    }
+
+    /**
+     * Order by id, created_at or updated_at of the group in the database and carry the instruction into the paging links.
+     */
+    private function applySort(ShowRequest $request, GroupCollectorInterface $collector): void
+    {
+        $sort = $request->attributes->get('sort');
+        if (!is_array($sort) || 0 === count($sort)) {
+            return;
+        }
+        $collector->setOrderBy($sort);
+        $this->parameters->set('sort', (string) $request->query->get('sort'));
     }
 
     /**
