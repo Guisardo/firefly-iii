@@ -21,7 +21,7 @@ use Throwable;
 class TimestampFilterRequest extends ApiRequest
 {
     private const array FIELDS  = ['created_since', 'created_until', 'updated_since', 'updated_until'];
-    private const string FORMAT = '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})?)?$/';
+    public const string FORMAT  = '/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})?)?$/';
 
     public function rules(): array
     {
@@ -46,7 +46,7 @@ class TimestampFilterRequest extends ApiRequest
                 if (!is_string($raw) || '' === $raw) {
                     continue;
                 }
-                $moment = $this->parse($raw, str_ends_with($field, '_until'));
+                $moment = self::parseMoment($raw, str_ends_with($field, '_until'));
                 if (!$moment instanceof Carbon) {
                     $validator->errors()->add($field, sprintf('The %s field must be a valid ISO-8601 date or date and time.', $field));
 
@@ -70,7 +70,7 @@ class TimestampFilterRequest extends ApiRequest
         });
     }
 
-    private function parse(string $raw, bool $endOfPeriod): ?Carbon
+    public static function parseMoment(string $raw, bool $endOfPeriod): ?Carbon
     {
         $timezone = (string) config('app.timezone');
 
