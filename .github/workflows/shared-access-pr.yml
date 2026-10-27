@@ -75,6 +75,7 @@ jobs:
             tests/integration/Api/Models/Transaction/ListTimestampFilterTest.php \
             tests/integration/Api/Models/Transaction/ListSortTest.php \
             tests/integration/Api/Data/DeletedItemsTest.php \
+            tests/integration/Api/System/AboutCapabilitiesTest.php \
             tests/integration/Api/Models/UserGroup/UserGroupControllerTest.php \
             tests/integration/Support/Http/SharedAdministration/AdministrationResolverTest.php \
             tests/integration/Support/Http/SharedAdministration/ScopedRequestAuthorizationTest.php \
