@@ -163,6 +163,13 @@ class JournalUpdateService
     public function setTransactionJournal(TransactionJournal $transactionJournal): void
     {
         $this->transactionJournal = $transactionJournal;
+
+        // Callers that only name the journal (the web bulk edit, through the journal repository) never set the group.
+        // This takes the group from the journal, so the user group is wired exactly as when the group is named.
+        $group = $transactionJournal->transactionGroup;
+        if (!isset($this->transactionGroup) && $group instanceof TransactionGroup) {
+            $this->setTransactionGroup($group);
+        }
     }
 
     public function update(): void
