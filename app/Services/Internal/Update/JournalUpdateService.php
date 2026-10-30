@@ -163,6 +163,13 @@ class JournalUpdateService
     public function setTransactionJournal(TransactionJournal $transactionJournal): void
     {
         $this->transactionJournal = $transactionJournal;
+
+        // Callers that only name the journal (the web bulk edit, through the journal repository) never set the group.
+        // This takes the group from the journal, so the user group is wired exactly as when the group is named.
+        $group = $transactionJournal->transactionGroup;
+        if (!isset($this->transactionGroup) && $group instanceof TransactionGroup) {
+            $this->setTransactionGroup($group);
+        }
     }
 
     public function update(): void
@@ -205,6 +212,9 @@ class JournalUpdateService
         Preferences::mark();
 
         $this->transactionJournal->refresh();
+
+        // a journal-level change is a change of its group for clients that filter on the group timestamp.
+        $this->transactionJournal->transactionGroup?->touch();
         Log::debug('Done with update journal routine');
     }
 

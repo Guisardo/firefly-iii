@@ -465,6 +465,26 @@ trait TimeCollection
     }
 
     /**
+     * Collect transactions created at or after this moment (timestamp of the transaction group).
+     */
+    public function setCreatedSince(Carbon $date): GroupCollectorInterface
+    {
+        $this->query->where('transaction_groups.created_at', '>=', $date->copy()->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s'));
+
+        return $this;
+    }
+
+    /**
+     * Collect transactions created at or before this moment (timestamp of the transaction group).
+     */
+    public function setCreatedUntil(Carbon $date): GroupCollectorInterface
+    {
+        $this->query->where('transaction_groups.created_at', '<=', $date->copy()->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s'));
+
+        return $this;
+    }
+
+    /**
      * Set the end time of the results to return.
      */
     public function setEnd(Carbon $end): GroupCollectorInterface
@@ -607,6 +627,26 @@ trait TimeCollection
         $before = $date->format('Y-m-d 23:59:59');
         $this->query->where('transaction_journals.updated_at', '>=', $after);
         $this->query->where('transaction_journals.updated_at', '<=', $before);
+
+        return $this;
+    }
+
+    /**
+     * Collect transactions updated at or after this moment (timestamp of the transaction group).
+     */
+    public function setUpdatedSince(Carbon $date): GroupCollectorInterface
+    {
+        $this->query->where('transaction_groups.updated_at', '>=', $date->copy()->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s'));
+
+        return $this;
+    }
+
+    /**
+     * Collect transactions updated at or before this moment (timestamp of the transaction group).
+     */
+    public function setUpdatedUntil(Carbon $date): GroupCollectorInterface
+    {
+        $this->query->where('transaction_groups.updated_at', '<=', $date->copy()->setTimezone(config('app.timezone'))->format('Y-m-d H:i:s'));
 
         return $this;
     }

@@ -46,5 +46,10 @@ class JournalDestroyService
         }
 
         $journal->delete();
+
+        // the journal is gone but its group may live on: surface the change on the group.
+        if (null !== $group && !$group->trashed()) {
+            $group->touch();
+        }
     }
 }

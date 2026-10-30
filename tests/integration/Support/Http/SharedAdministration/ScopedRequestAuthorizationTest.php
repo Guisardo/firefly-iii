@@ -26,6 +26,7 @@ namespace Tests\integration\Support\Http\SharedAdministration;
 
 use FireflyIII\Api\V1\Requests\Models\Account\StoreRequest as AccountStoreRequest;
 use FireflyIII\Api\V1\Requests\Models\Account\UpdateRequest as AccountUpdateRequest;
+use FireflyIII\Api\V1\Requests\Models\Transaction\ShowRequest as TransactionShowRequest;
 use FireflyIII\Api\V1\Requests\Models\Transaction\StoreRequest as TransactionStoreRequest;
 use FireflyIII\Api\V1\Requests\Models\Transaction\UpdateRequest as TransactionUpdateRequest;
 use FireflyIII\Api\V1\Requests\Models\UserGroup\DestroyRequest as UserGroupDestroyRequest;
@@ -253,6 +254,7 @@ final class ScopedRequestAuthorizationTest extends TestCase
     {
         return [
             \FireflyIII\Api\V1\Requests\Models\Account\ShowRequest::class => 'Read-only account filters are guarded by RouteRoleResolver before validation.',
+            TransactionShowRequest::class                                 => 'Read-only transaction list filters are guarded by RouteRoleResolver before validation.',
             UserGroupStoreRequest::class                                  => 'New group creation has no existing route group; explicit selected groups are guarded by RouteRoleResolver before validation.',
         ];
     }

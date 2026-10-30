@@ -51,11 +51,12 @@ final class AboutController extends Controller
         $phpOs         = str_replace($search, $replace, PHP_OS);
         $currentDriver = DB::getDriverName();
         $data          = [
-            'version'     => config('firefly.version'),
-            'api_version' => config('firefly.version'),
-            'php_version' => $phpVersion,
-            'os'          => $phpOs,
-            'driver'      => $currentDriver,
+            'version'      => config('firefly.version'),
+            'api_version'  => config('firefly.version'),
+            'php_version'  => $phpVersion,
+            'os'           => $phpOs,
+            'driver'       => $currentDriver,
+            'capabilities' => config('firefly.api_capabilities', []),
         ];
 
         return response()->api(['data' => $data])->header('Content-Type', self::JSON_CONTENT_TYPE);

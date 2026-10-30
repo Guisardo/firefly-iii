@@ -455,6 +455,16 @@ interface GroupCollectorInterface
     public function setCreatedAt(Carbon $date): self;
 
     /**
+     * Collect transactions created at or after this moment (timestamp of the transaction group).
+     */
+    public function setCreatedSince(Carbon $date): self;
+
+    /**
+     * Collect transactions created at or before this moment (timestamp of the transaction group).
+     */
+    public function setCreatedUntil(Carbon $date): self;
+
+    /**
      * Limit results to a specific currency, either foreign or normal one.
      */
     public function setCurrency(TransactionCurrency $currency): self;
@@ -502,6 +512,12 @@ interface GroupCollectorInterface
      * Limit the number of returned entries.
      */
     public function setLimit(int $limit): self;
+
+    /**
+     * Order the rows in the database by id, created_at or updated_at of the transaction group, keeping paging intact.
+     * Instructions are pairs of field and direction ('asc' or 'desc').
+     */
+    public function setOrderBy(array $instructions): self;
 
     /**
      * Collect transactions after a specific date.
@@ -592,6 +608,16 @@ interface GroupCollectorInterface
      * Collect transactions updated on a specific date.
      */
     public function setUpdatedAt(Carbon $date): self;
+
+    /**
+     * Collect transactions updated at or after this moment (timestamp of the transaction group).
+     */
+    public function setUpdatedSince(Carbon $date): self;
+
+    /**
+     * Collect transactions updated at or before this moment (timestamp of the transaction group).
+     */
+    public function setUpdatedUntil(Carbon $date): self;
 
     /**
      * Set the user object and start the query.

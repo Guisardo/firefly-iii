@@ -82,6 +82,8 @@ return [
 'build_time' => 1779339576,
     'api_version'                          => '2.1.0', // field is no longer used.
     'db_version'                           => 28, // field is no longer used.
+    // what clients can rely on, listed by GET /v1/about. Add a name only together with the feature it names.
+    'api_capabilities'                     => ['incremental.transactions', 'deleted_items'],
 
     // Docker build info, if present:
     'is_docker'                            => env('IS_DOCKER', false),
@@ -849,6 +851,7 @@ return [
             'balance_difference',
             'pc_balance_difference',
         ],
+        'Transaction' => ['id', 'created_at', 'updated_at'],
     ],
     'allowed_db_sort_parameters'           => [
         'Account' => ['id', 'order', 'name', 'iban', 'active', 'account_type_id'],
